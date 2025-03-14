@@ -1,7 +1,11 @@
 from flask import Flask, render_template
-from database.engine import DatabaseEngine 
+from shared import db
+from blueprints.admin.handler import admin
+
 app = Flask(__name__, template_folder='templates')
-db = DatabaseEngine('sqlite:///AdaptiveLearning.db')
+
+
+app.register_blueprint(admin, url_prefix='/admin')
 
 @app.route('/')
 def index():
@@ -19,3 +23,4 @@ def addQestion():
 if __name__ == '__main__':
     app.run(debug=True)
 
+ 

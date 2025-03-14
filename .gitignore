@@ -174,3 +174,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+#self added files
+*.db
+*.sqlite3
+.idea/
+__pycache__/
