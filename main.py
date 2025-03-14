@@ -7,6 +7,11 @@ db = DatabaseEngine('sqlite:///AdaptiveLearning.db')
 def index():
     return render_template('base.html')
 
+@app.route('/categories')
+def categories():
+    categories = db.get_all('Category')
+    return render_template('categories.html')
+
 @app.route('/addQuestion')
 def addQestion():
     pass
