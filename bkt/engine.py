@@ -7,4 +7,3 @@ class BKTEngine:
         self.p_slip = p_slip
         self.p_guess = p_guess
         self.p_lapse = p_lapse
-
