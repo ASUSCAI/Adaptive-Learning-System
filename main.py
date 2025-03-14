@@ -8,7 +8,7 @@ def index():
 
 @app.route('/addQuestion')
 def addQestion():
-    
+    pass
 
 if __name__ == '__main__':
     app.run(debug=True)
