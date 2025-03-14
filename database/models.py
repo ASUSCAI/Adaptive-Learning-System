@@ -40,3 +40,11 @@ class Section(base):
     name = Column(String)
     categories = relationship('Category', back_populates='section')
 
+class Logs(base):
+    __tablename__ = 'logs'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    user = relationship('User')
+    action = Column(String)
+    timestamp = Column(DateTime)
+
