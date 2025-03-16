@@ -3,8 +3,8 @@
         {
             "previewLimit": 50,
             "driver": "SQLite",
-            "name": "Test",
-            "database": "${workspaceFolder:Adaptive-Learning-System}/AaptiveLearning.db"
+            "database": "${workspaceFolder:Adaptive-Learning-System}/AaptiveLearning.db",
+            "name": "asdqwdqvwegwergw"
         }
     ]
 }
