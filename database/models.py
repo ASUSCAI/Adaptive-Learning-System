@@ -19,7 +19,7 @@ class Category(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
-
+    uuid = Column(String, unique=True, nullable=False)
     # Remove or comment out the relationship if you don't want
     # `Category.questions` automatically loaded or cascaded.
     # questions = relationship(
@@ -36,7 +36,7 @@ class Question(Base):
     id = Column(Integer, primary_key=True)
     text = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
-
+    uuid = Column(String, unique=True, nullable=False)
     # Remove or simplify the relationship
     # category = relationship("Category", back_populates="questions")
 
@@ -60,6 +60,7 @@ class Option(Base):
 
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     question = relationship("Question", back_populates="options")
+    uuid = Column(String, unique=True, nullable=False)
 
     def __repr__(self):
         return f"<Option(id={self.id}, text='{self.text[:30]}...', is_correct={self.is_correct})>"
