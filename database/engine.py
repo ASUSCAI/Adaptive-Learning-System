@@ -21,10 +21,17 @@ class DatabaseEngine:
         return self.Base
 
     def add(self, obj):
+        """Add or update an object in the database"""
         session = self.get_session()
-        session.add(obj)
-        session.commit()
-        session.close()
+        try:
+            # If the object is already attached to a session, merge it
+            if hasattr(obj, '_sa_instance_state') and obj._sa_instance_state.session is not None:
+                obj = session.merge(obj)
+            else:
+                session.add(obj)
+            session.commit()
+        finally:
+            session.close()
 
     def get(self, model, id):
         session = self.get_session()
@@ -37,3 +44,7 @@ class DatabaseEngine:
         objs = session.query(model).all()
         session.close()
         return objs
+
+    def query(self, model):
+        """Get a query object for the specified model"""
+        return self.get_session().query(model)

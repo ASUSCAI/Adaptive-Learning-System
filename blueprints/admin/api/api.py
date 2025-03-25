@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request
 from shared import db
 from database.models import Category, Question, Option
-
+from uuid import uuid4
 
 admin_api = Blueprint("admin_api", __name__, url_prefix="/api")
 
@@ -20,7 +20,7 @@ def create_category():
         return {"message": "Missing 'name' in request body"}, 400
 
     category_name = data['name']
-    category = Category(name=category_name)
+    category = Category(name=category_name, uuid = str(uuid4()))
     
     try:
         db.add(category)
@@ -75,13 +75,13 @@ def add_question():
         return jsonify({"error": f"Category '{category_name}' not found."}), 400
 
     # 3. Create the Question object
-    new_question = Question(text=question_text, category_id=category.id)
+    new_question = Question(text=question_text, category_id=category.id, uuid = str(uuid4()))
 
     # 4. Create and attach the Option objects
     for opt in options_data:
         opt_text = opt.get("text", "")
         is_correct = opt.get("is_correct", False)
-        new_option = Option(text=opt_text, is_correct=is_correct)
+        new_option = Option(text=opt_text, is_correct=is_correct, uuid = str(uuid4()))
         new_question.options.append(new_option)
 
     # 5. Persist to database

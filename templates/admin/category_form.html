@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+
+{% block admin_title %}
+    {% if category %}Edit Category{% else %}Add New Category{% endif %}
+{% endblock %}
+
+{% block admin_content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">
+                    {% if category %}Edit Category{% else %}Add New Category{% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ category.name if category else '' }}" required>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('admin.manage_categories') }}" class="btn btn-secondary">
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            {% if category %}Update Category{% else %}Add Category{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

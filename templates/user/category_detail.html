@@ -1,0 +1,93 @@
+{% extends "user/base.html" %}
+
+{% block title %}{{ category.name }} - Adaptive Learning System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>{{ category.name }}</h2>
+        <div class="progress mb-3">
+            <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
+                 role="progressbar"
+                 style="width: {{ (user_category.current_knowledge * 100)|round }}%"
+                 aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
+                 aria-valuemin="0"
+                 aria-valuemax="100">
+                {{ (user_category.current_knowledge * 100)|round }}%
+            </div>
+        </div>
+        {% if user_category.is_mastered() %}
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle"></i> Congratulations! You have mastered this category!
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4>Current Question</h4>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Loading question...</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" disabled>Submit Answer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h4>Learning Statistics</h4>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Knowledge State
+                        <span class="badge bg-primary rounded-pill">
+                            {{ "%.2f"|format(user_category.current_knowledge) }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Status
+                        <span class="badge {% if user_category.is_mastered() %}bg-success{% else %}bg-warning{% endif %} rounded-pill">
+                            {{ "Mastered" if user_category.is_mastered() else "In Progress" }}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">
+                <h4>Learning History</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Question</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="3" class="text-center">Loading history...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

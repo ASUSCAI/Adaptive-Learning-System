@@ -1,0 +1,99 @@
+{% extends "admin/base.html" %}
+
+{% block admin_title %}Admin Dashboard{% endblock %}
+
+{% block admin_content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Total Users</h5>
+                <h2 class="card-text">{{ users|length }}</h2>
+                <a href="{{ url_for('admin.manage_users') }}" class="btn btn-primary">Manage Users</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Total Categories</h5>
+                <h2 class="card-text">{{ categories|length }}</h2>
+                <a href="{{ url_for('admin.manage_categories') }}" class="btn btn-primary">Manage Categories</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Active Users</h5>
+                <h2 class="card-text">{{ users|selectattr('is_active')|list|length }}</h2>
+                <a href="{{ url_for('admin.manage_users') }}" class="btn btn-primary">View Active Users</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Recent Users</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Categories</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users[:5] %}
+                            <tr>
+                                <td>{{ user.name }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>
+                                    <a href="{{ url_for('admin.manage_user_categories', user_id=user.id) }}">
+                                        Manage Categories
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Categories Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Assigned Users</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category in categories %}
+                            <tr>
+                                <td>{{ category.name }}</td>
+                                <td>{{ category_counts[category.id] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

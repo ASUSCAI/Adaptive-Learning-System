@@ -1,0 +1,94 @@
+{% extends "admin/base.html" %}
+
+{% block admin_title %}Manage Categories for {{ user.name }}{% endblock %}
+
+{% block admin_content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Assigned Categories</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Knowledge State</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category in categories %}
+                                {% if category.id in user_categories %}
+                                <tr>
+                                    <td>{{ category.name }}</td>
+                                    <td>
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar {% if user_categories[category.id].is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
+                                                 role="progressbar"
+                                                 style="width: {{ (user_categories[category.id].current_knowledge * 100)|round }}%"
+                                                 aria-valuenow="{{ (user_categories[category.id].current_knowledge * 100)|round }}"
+                                                 aria-valuemin="0"
+                                                 aria-valuemax="100">
+                                                {{ (user_categories[category.id].current_knowledge * 100)|round }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if user_categories[category.id].is_mastered() %}
+                                            <span class="badge bg-success">Mastered</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">In Progress</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('admin.remove_category', user_id=user.id, category_id=category.id) }}" 
+                                              style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="return confirm('Are you sure you want to remove this category?')">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No categories assigned.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Assign New Category</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.assign_category', user_id=user.id) }}">
+                    <div class="mb-3">
+                        <label for="category_id" class="form-label">Select Category</label>
+                        <select class="form-select" id="category_id" name="category_id" required>
+                            <option value="">Choose a category...</option>
+                            {% for category in categories %}
+                                {% if category.id not in user_categories %}
+                                <option value="{{ category.id }}">{{ category.name }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Assign Category</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

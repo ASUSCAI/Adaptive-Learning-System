@@ -1,0 +1,46 @@
+{% extends "user/base.html" %}
+
+{% block title %}Register - Adaptive Learning System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-center">Create New Account</h3>
+                <p class="text-center text-muted mb-0">Join our adaptive learning platform</p>
+            </div>
+            <div class="card-body">
+                <form method="POST" class="mb-4">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Full Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required 
+                               minlength="2" maxlength="50" pattern="[A-Za-z\s]+"
+                               title="Please enter a valid name (letters and spaces only)">
+                        <div class="form-text">Enter your full name (letters and spaces only)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email address</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                        <div class="form-text">We'll never share your email with anyone else.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required
+                               minlength="6" maxlength="50">
+                        <div class="form-text">Password must be at least 6 characters long.</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Create Account</button>
+                    </div>
+                </form>
+
+                <div class="text-center">
+                    <p class="mb-2">Already have an account?</p>
+                    <a href="{{ url_for('user.login') }}" class="btn btn-outline-primary">Login</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

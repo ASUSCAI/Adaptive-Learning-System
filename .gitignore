@@ -177,10 +177,10 @@ cython_debug/
 
 
 #self added files
-*.db
 *.sqlite3
 .idea/
 __pycache__/
 
 settings.json
 .vscode/
+test.py
