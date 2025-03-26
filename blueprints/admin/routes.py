@@ -1,9 +1,11 @@
-from flask import render_template, redirect, url_for, flash, request, session
-from database.models import User, Category, UserCategory
+from flask import render_template, redirect, url_for, flash, request, session, jsonify
+from database.models import User, Category, UserCategory, Question, Option
 from shared import db
 from functools import wraps
 from typing import Optional
+from sqlalchemy.orm import joinedload
 from . import admin_bp
+import uuid
 
 def admin_required(f):
     @wraps(f)
@@ -40,17 +42,12 @@ def admin_dashboard():
 @admin_bp.route('/categories')
 @admin_required
 def manage_categories():
-    categories = db.get_all(Category)
-    
-    # Calculate category counts
-    category_counts = {}
-    for category in categories:
-        count = db.query(UserCategory).filter_by(category_id=category.id).count()
-        category_counts[category.id] = count
-    
-    return render_template('admin/categories.html', 
-                         categories=categories,
-                         category_counts=category_counts)
+    """Manage categories and their questions"""
+    # Get categories with questions eagerly loaded
+    categories = db.query(Category).options(
+        joinedload(Category.questions)
+    ).all()
+    return render_template('admin/categories.html', categories=categories)
 
 @admin_bp.route('/categories/add', methods=['GET', 'POST'])
 @admin_required
@@ -162,4 +159,128 @@ def remove_category(user_id, category_id):
     else:
         flash('Category assignment not found.', 'error')
     
-    return redirect(url_for('admin.manage_user_categories', user_id=user_id)) 
+    return redirect(url_for('admin.manage_user_categories', user_id=user_id))
+
+@admin_bp.route('/categories/<int:category_id>/questions/add', methods=['GET', 'POST'])
+@admin_required
+def add_question(category_id):
+    category = db.get(Category, category_id)
+    if not category:
+        flash('Category not found.', 'error')
+        return redirect(url_for('admin.manage_categories'))
+    
+    if request.method == 'POST':
+        text = request.form.get('text')
+        options = request.form.getlist('options[]')
+        correct_option = request.form.get('correct_option')
+        
+        if not text or not options or not correct_option:
+            flash('All fields are required.', 'error')
+            return redirect(url_for('admin.add_question', category_id=category_id))
+        
+        question = Question(text=text, category_id=category_id, uuid=str(uuid.uuid4()))
+        db.add(question)
+        
+        for i, option_text in enumerate(options):
+            option = Option(
+                text=option_text,
+                is_correct=(str(i) == correct_option),
+                question_id=question.id,
+                uuid=str(uuid.uuid4())
+            )
+            db.add(option)
+        
+        flash('Question added successfully!', 'success')
+        return redirect(url_for('admin.manage_categories'))
+    
+    return render_template('admin/question_form.html', category=category)
+
+@admin_bp.route('/questions/<int:question_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_question(question_id):
+    # Get question with options eagerly loaded
+    question = db.query(Question).filter_by(id=question_id).options(
+        joinedload(Question.options)
+    ).first()
+    
+    if not question:
+        flash('Question not found.', 'error')
+        return redirect(url_for('admin.manage_categories'))
+    
+    if request.method == 'POST':
+        text = request.form.get('text')
+        options = request.form.getlist('options[]')
+        correct_option = request.form.get('correct_option')
+        
+        if not text or not options or not correct_option:
+            flash('All fields are required.', 'error')
+            return redirect(url_for('admin.edit_question', question_id=question_id))
+        
+        question.text = text
+        
+        # Delete existing options
+        db.query(Option).filter_by(question_id=question_id).delete()
+        
+        # Add new options
+        for i, option_text in enumerate(options):
+            option = Option(
+                text=option_text,
+                is_correct=(str(i) == correct_option),
+                question_id=question_id
+            )
+            db.add(option)
+        
+        flash('Question updated successfully!', 'success')
+        return redirect(url_for('admin.manage_categories'))
+    
+    return render_template('admin/question_form.html', question=question)
+
+@admin_bp.route('/questions/<int:question_id>', methods=['DELETE'])
+@admin_required
+def delete_question(question_id):
+    question = db.get(Question, question_id)
+    if not question:
+        return jsonify({'success': False, 'error': 'Question not found'}), 404
+    
+    # Delete all options first
+    db.query(Option).filter_by(question_id=question_id).delete()
+    # Then delete the question
+    db.query(Question).filter_by(id=question_id).delete()
+    
+    return jsonify({'success': True})
+
+@admin_bp.route('/api/categories/<int:category_id>/questions')
+@admin_required
+def get_category_questions(category_id):
+    """API endpoint to fetch questions for a category"""
+    questions = db.query(Question).filter_by(category_id=category_id).options(
+        joinedload(Question.options)
+    ).all()
+    
+    return jsonify([{
+        'id': q.id,
+        'text': q.text,
+        'options': [{
+            'id': opt.id,
+            'text': opt.text,
+            'is_correct': opt.is_correct
+        } for opt in q.options]
+    } for q in questions])
+
+@admin_bp.route('/categories/<int:category_id>/questions')
+@admin_required
+def view_category_questions(category_id):
+    """View questions for a specific category"""
+    category = db.get(Category, category_id)
+    if not category:
+        flash('Category not found.', 'error')
+        return redirect(url_for('admin.manage_categories'))
+    
+    # Get questions with options eagerly loaded
+    questions = db.query(Question).filter_by(category_id=category_id).options(
+        joinedload(Question.options)
+    ).all()
+    
+    return render_template('admin/category_questions.html',
+                         category=category,
+                         questions=questions) 

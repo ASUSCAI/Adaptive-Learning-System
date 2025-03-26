@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     Float,
     func,
+    event,
 )
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
 from .base import Base
@@ -22,12 +23,10 @@ class Category(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     uuid = Column(String, unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
-    # Remove or comment out the relationship if you don't want
-    # `Category.questions` automatically loaded or cascaded.
-    # questions = relationship(
-    #    "Question", back_populates="category", cascade="all, delete-orphan"
-    # )
-
+    
+    # Add questions relationship
+    questions = relationship("Question", back_populates="category", cascade="all, delete-orphan")
+    
     # Add relationship to UserCategory
     user_categories = relationship("UserCategory", back_populates="category", cascade="all, delete-orphan")
 
@@ -42,12 +41,10 @@ class Question(Base):
     text = Column(String, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     uuid = Column(String, unique=True, nullable=False)
-    # Remove or simplify the relationship
-    # category = relationship("Category", back_populates="questions")
-
-    # Optionally, keep a one-way relationship if you still want easy access to the category:
-    category = relationship("Category", lazy="joined")
-
+    
+    # Update the relationship to match Category model
+    category = relationship("Category", back_populates="questions")
+    
     options = relationship(
         "Option", back_populates="question", cascade="all, delete-orphan"
     )
@@ -152,6 +149,8 @@ class UserCategory(Base):
         predicted_knowledge = self.bkt_engine.predict(self.current_knowledge)
         # Then update based on the actual performance
         self.current_knowledge = self.bkt_engine.update(predicted_knowledge, is_correct)
+        # Reinitialize BKT engine with updated parameters
+        self._init_bkt_engine()
 
     def is_mastered(self, threshold: float = 0.95) -> bool:
         """Check if the user has mastered this category."""
@@ -161,6 +160,11 @@ class UserCategory(Base):
 
     def __repr__(self):
         return f"<UserCategory(user_id={self.user_id}, category_id={self.category_id}, knowledge={self.current_knowledge:.2f})>"
+
+# Add event listener to initialize BKT engine when UserCategory is loaded
+@event.listens_for(UserCategory, 'load')
+def init_bkt_engine(target, context):
+    target._init_bkt_engine()
 
 # ATTEMPT LOG (User interactions)
 class AttemptLog(Base):

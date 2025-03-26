@@ -31,10 +31,14 @@
                 <h4>Current Question</h4>
             </div>
             <div class="card-body">
-                <p class="card-text">Loading question...</p>
-                <div class="d-grid gap-2">
-                    <button class="btn btn-primary" disabled>Submit Answer</button>
+                <div id="question-container">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
                 </div>
+                <div id="answer-feedback" class="alert d-none"></div>
             </div>
         </div>
     </div>
@@ -79,7 +83,7 @@
                                 <th>Result</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="history-body">
                             <tr>
                                 <td colspan="3" class="text-center">Loading history...</td>
                             </tr>
@@ -90,4 +94,159 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentQuestion = null;
+let selectedOption = null;
+
+// Load initial question and history when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    loadQuestion();
+    loadHistory();
+});
+
+function loadQuestion() {
+    fetch(`/user/category/{{ category.id }}/next-question`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                document.getElementById('question-container').innerHTML = 
+                    `<div class="alert alert-warning">${data.error}</div>`;
+                return;
+            }
+            
+            currentQuestion = data;
+            const optionsHtml = data.options.map(opt => `
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="options" 
+                           id="option${opt.id}" value="${opt.id}">
+                    <label class="form-check-label" for="option${opt.id}">
+                        ${opt.text}
+                    </label>
+                </div>
+            `).join('');
+            
+            document.getElementById('question-container').innerHTML = `
+                <p class="card-text">${data.text}</p>
+                <div class="mb-3">
+                    ${optionsHtml}
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>
+                </div>
+            `;
+            
+            // Add event listeners to radio buttons
+            document.querySelectorAll('input[name="options"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    selectedOption = e.target.value;
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error loading question:', error);
+            document.getElementById('question-container').innerHTML = 
+                '<div class="alert alert-danger">Error loading question. Please try again.</div>';
+        });
+}
+
+function submitAnswer() {
+    if (!selectedOption) {
+        alert('Please select an answer');
+        return;
+    }
+    
+    fetch(`/user/category/{{ category.id }}/submit-answer`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            question_id: currentQuestion.question_id,
+            option_id: selectedOption
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        const feedback = document.getElementById('answer-feedback');
+        feedback.textContent = data.explanation;
+        feedback.className = `alert ${data.correct ? 'alert-success' : 'alert-danger'}`;
+        feedback.classList.remove('d-none');
+        
+        // Update the progress bar with the new knowledge state
+        const progressBar = document.querySelector('.progress-bar');
+        const progressValue = Math.round(data.knowledge_state * 100);
+        progressBar.style.width = `${progressValue}%`;
+        progressBar.setAttribute('aria-valuenow', progressValue);
+        progressBar.textContent = `${progressValue}%`;
+        
+        if (data.correct) {
+            setTimeout(() => {
+                loadQuestion();
+                loadHistory();
+                feedback.classList.add('d-none');
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        console.error('Error submitting answer:', error);
+        alert('Error submitting answer. Please try again.');
+    });
+}
+
+function loadHistory() {
+    fetch(`/user/category/{{ category.id }}/history`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const tbody = document.getElementById('history-body');
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="text-center">No history available</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = data.map(item => `
+                <tr>
+                    <td>${item.date}</td>
+                    <td>${item.question}</td>
+                    <td>
+                        <span class="badge ${item.result === 'Correct' ? 'bg-success' : 'bg-danger'}">
+                            ${item.result}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading history:', error);
+            document.getElementById('history-body').innerHTML = `
+                <tr>
+                    <td colspan="3" class="text-center text-danger">
+                        Error loading history. Please try again.
+                    </td>
+                </tr>
+            `;
+        });
+}
+</script>
 {% endblock %} 
