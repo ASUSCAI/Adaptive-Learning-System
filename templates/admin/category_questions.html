@@ -43,11 +43,11 @@
                             </div>
                         </div>
                         <div class="ms-3">
-                            <a href="{{ url_for('admin.edit_question', question_id=question.id) }}" 
+                            <a href="{{ url_for('admin.edit_question', question_uuid=question.uuid) }}" 
                                class="btn btn-sm btn-primary">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <button class="btn btn-sm btn-danger" onclick="deleteQuestion({{ question.id }})">
+                            <button class="btn btn-sm btn-danger" onclick="deleteQuestion('{{ question.uuid }}')">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -67,13 +67,10 @@
 
 {% block scripts %}
 <script>
-function deleteQuestion(questionId) {
-    if (confirm('Are you sure you want to delete this question? This action cannot be undone.')) {
-        fetch(`/admin/questions/${questionId}`, {
+function deleteQuestion(questionUuid) {
+    if (confirm('Are you sure you want to delete this question?')) {
+        fetch(`/admin/questions/${questionUuid}`, {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            }
         })
         .then(response => response.json())
         .then(data => {
@@ -85,7 +82,7 @@ function deleteQuestion(questionId) {
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error deleting question. Please try again.');
+            alert('Error deleting question');
         });
     }
 }

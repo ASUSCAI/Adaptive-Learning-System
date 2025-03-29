@@ -64,13 +64,13 @@ def create_categories():
         for category_name, description in CSE110_CATEGORIES.items():
             existing_category = session.query(Category).filter_by(name=category_name).first()
             if not existing_category:
-                category = Category(name=category_name)
+                category = Category(name=category_name, uuid=str(uuid.uuid4()))
                 session.add(category)
         session.commit()
     finally:
         session.close()
 
-def generate_question_bank(category_name: str, num_questions: int = 50) -> List[Dict]:
+def generate_question_bank(category_name: str, num_questions: int = 25) -> List[Dict]:
     """
     Generate questions for a specific category using Google's Generative AI.
     
@@ -189,7 +189,7 @@ def main():
                     continue
                 
                 # Generate questions
-                questions = generate_question_bank(category_name, num_questions=10)  # Reduced to 3 questions per category
+                questions = generate_question_bank(category_name, num_questions=25)  # Reduced to 3 questions per category
                 
                 # Save to database
                 if questions:

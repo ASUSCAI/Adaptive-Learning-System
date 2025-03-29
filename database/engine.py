@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 from .base import Base
 from .models import *
 
@@ -8,6 +8,7 @@ class DatabaseEngine:
     def __init__(self, db_url: str):
         self.engine = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)
+        self.Session = scoped_session(self.Session)  # Use scoped session
         self.Base = Base
         self.create_tables()
 
@@ -35,15 +36,17 @@ class DatabaseEngine:
 
     def get(self, model, id):
         session = self.get_session()
-        obj = session.query(model).get(id)
-        session.close()
-        return obj
+        try:
+            return session.query(model).get(id)
+        finally:
+            session.close()
 
     def get_all(self, model):
         session = self.get_session()
-        objs = session.query(model).all()
-        session.close()
-        return objs
+        try:
+            return session.query(model).all()
+        finally:
+            session.close()
 
     def query(self, model):
         """Get a query object for the specified model"""

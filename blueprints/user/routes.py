@@ -1,6 +1,6 @@
-from flask import render_template, redirect, url_for, flash, request, session, jsonify
+from flask import render_template, redirect, url_for, flash, request, session, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
-from database.models import User, Category, UserCategory, Question, Option, AttemptLog
+from database.models import User, Category, UserCategory, Question, Option, AttemptLog, Progress, Section
 from shared import db
 from functools import wraps
 from typing import Optional
@@ -27,7 +27,7 @@ def login_required(f):
 def get_current_user() -> Optional[User]:
     if 'user_id' not in session:
         return None
-    return db.get(User, session['user_id'])
+    return g.db_session.query(User).get(session['user_id'])
 
 # Authentication routes
 @user_bp.route('/login', methods=['GET', 'POST'])
@@ -36,7 +36,7 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
         
-        user = db.query(User).filter_by(email=email).first()
+        user = g.db_session.query(User).filter_by(email=email).first()
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
             flash('Successfully logged in!', 'success')
@@ -53,7 +53,7 @@ def register():
         email = request.form.get('email')
         password = request.form.get('password')
         
-        if db.query(User).filter_by(email=email).first():
+        if g.db_session.query(User).filter_by(email=email).first():
             flash('Email already registered.', 'error')
             return redirect(url_for('user.register'))
         
@@ -62,7 +62,8 @@ def register():
             email=email,
             password_hash=generate_password_hash(password)
         )
-        db.add(user)
+        g.db_session.add(user)
+        g.db_session.commit()
         
         flash('Registration successful! Please log in.', 'success')
         return redirect(url_for('user.login'))
@@ -80,99 +81,157 @@ def logout():
 @login_required
 def dashboard():
     user = get_current_user()
-    categories = db.get_all(Category)
+    
+    # Get all categories
+    all_categories = g.db_session.query(Category).all()
+    logger.debug(f"Found {len(all_categories)} categories in database")
+    
+    # Get categories from user's sections
+    section_categories = set()
+    user_sections = user.sections
+    logger.debug(f"User {user.id} belongs to {len(user_sections)} sections")
+    
+    for section in user_sections:
+        for category in section.categories:
+            section_categories.add(category)
+            logger.debug(f"Adding category {category.name} from section {section.name}")
+    
+    # All categories the user has access to (direct assignments + section assignments)
+    categories = list(set(all_categories).union(section_categories))
+    
+    # Get user's learning state for each category
     user_categories = {
-        uc.category_id: uc for uc in db.query(UserCategory).filter_by(user_id=user.id).all()
+        uc.category_id: uc for uc in g.db_session.query(UserCategory).filter_by(user_id=user.id).all()
     }
+    logger.debug(f"Found {len(user_categories)} user categories for user {user.id}")
+    
+    # Get the user's sections
+    sections = user.sections
     
     return render_template('user/dashboard.html',
                          user=user,
                          categories=categories,
-                         user_categories=user_categories)
+                         user_categories=user_categories,
+                         sections=sections)
 
-@user_bp.route('/category/<int:category_id>')
+@user_bp.route('/category/<uuid:category_uuid>')
 @login_required
-def category_detail(category_id):
+def category_detail(category_uuid):
     user = get_current_user()
+    logger.debug(f"Accessing category detail for UUID: {category_uuid}")
+    
+    # Convert uuid parameter to string for database lookup
+    category_uuid_str = str(category_uuid)
     
     # Get category with questions and options eagerly loaded
-    category = db.query(Category).filter_by(id=category_id).options(
+    category = g.db_session.query(Category).filter_by(uuid=category_uuid_str).options(
         joinedload(Category.questions).joinedload(Question.options)
     ).first()
+    print(f"Category: {category}")
     
     if not category:
+        logger.error(f"Category with UUID {category_uuid} not found")
         flash('Category not found.', 'error')
         return redirect(url_for('user.dashboard'))
     
-    user_category = db.query(UserCategory).filter_by(
+    logger.debug(f"Found category: {category.name} (ID: {category.id}, UUID: {category.uuid})")
+    
+    user_category = g.db_session.query(UserCategory).filter_by(
         user_id=user.id,
-        category_id=category_id
+        category_id=category.id
     ).first()
     
     if not user_category:
+        logger.debug(f"Creating new UserCategory for user {user.id} and category {category.id}")
         user_category = UserCategory(
             user_id=user.id,
-            category_id=category_id
+            category_id=category.id
         )
-        db.add(user_category)
+        g.db_session.add(user_category)
+        g.db_session.commit()  # Commit the new user_category
+    
+    # Get progress data
+    progress = g.db_session.query(Progress).filter_by(
+        user_id=user.id,
+        category_id=category.id
+    ).first()
+    
+    logger.debug(f"Rendering category detail template with category: {category.name}, user_category: {user_category.current_knowledge if user_category else 'None'}")
     
     return render_template('user/category_detail.html',
                          user=user,
                          category=category,
-                         user_category=user_category)
+                         user_category=user_category,
+                         progress=progress)
 
-@user_bp.route('/category/<int:category_id>/next-question')
+@user_bp.route('/category/<uuid:category_uuid>/next-question')
 @login_required
-def get_next_question(category_id):
-    logger.debug(f"Accessing next question for category {category_id}")
+def get_next_question(category_uuid):
+    logger.debug(f"Accessing next question for category {category_uuid}")
     user = get_current_user()
-    category = db.get(Category, category_id)
+    logger.debug(f"Current user: {user.id}")
+    
+    # Convert uuid parameter to string for database lookup
+    category_uuid_str = str(category_uuid)
+    
+    category = g.db_session.query(Category).filter_by(uuid=category_uuid_str).first()
     if not category:
-        logger.error(f"Category {category_id} not found")
+        logger.error(f"Category {category_uuid} not found")
         return jsonify({'error': 'Category not found'}), 404
     
+    logger.debug(f"Found category: {category.name} (ID: {category.id}, UUID: {category.uuid})")
+    
     # Get a random question from the category with options eagerly loaded
-    question = db.query(Question).filter_by(category_id=category_id).options(
+    question = g.db_session.query(Question).filter_by(category_id=category.id).options(
         joinedload(Question.options)
     ).order_by(func.random()).first()
     
     if not question:
-        logger.error(f"No questions found for category {category_id}")
+        logger.error(f"No questions found for category {category_uuid}")
         return jsonify({'error': 'No questions available'}), 404
     
-    logger.debug(f"Found question {question.id} for category {category_id}")
+    logger.debug(f"Found question {question.uuid} for category {category_uuid}")
     logger.debug(f"Question text: {question.text}")
     logger.debug(f"Number of options: {len(question.options)}")
-    logger.debug(f"Options: {[{'id': opt.id, 'text': opt.text, 'is_correct': opt.is_correct} for opt in question.options]}")
     
     # Format the question for the frontend
-    options = [{'id': opt.id, 'text': opt.text} for opt in question.options]
-    return jsonify({
-        'question_id': question.id,
+    options = [{'uuid': opt.uuid, 'text': opt.text} for opt in question.options]
+    response_data = {
+        'question_uuid': question.uuid,
         'text': question.text,
         'options': options
-    })
+    }
+    logger.debug(f"Sending response: {response_data}")
+    
+    return jsonify(response_data)
 
-
-@user_bp.route('/category/<int:category_id>/submit-answer', methods=['POST'])
+@user_bp.route('/category/<uuid:category_uuid>/submit-answer', methods=['POST'])
 @login_required
-def submit_answer(category_id):
+def submit_answer(category_uuid):
     try:
         user = get_current_user()
         data = request.get_json()
         
-        if not data or 'question_id' not in data or 'option_id' not in data:
-            logger.error("Invalid request data: missing question_id or option_id")
+        if not data or 'question_uuid' not in data or 'option_uuid' not in data:
+            logger.error("Invalid request data: missing question_uuid or option_uuid")
             return jsonify({'error': 'Invalid request'}), 400
         
-        question = db.get(Question, data['question_id'])
-        if not question or question.category_id != category_id:
-            logger.error(f"Question {data['question_id']} not found or does not belong to category {category_id}")
+        # Convert uuid parameter to string for database lookup
+        category_uuid_str = str(category_uuid)
+        
+        category = g.db_session.query(Category).filter_by(uuid=category_uuid_str).first()
+        if not category:
+            logger.error(f"Category {category_uuid} not found")
+            return jsonify({'error': 'Category not found'}), 404
+        
+        question = g.db_session.query(Question).filter_by(uuid=data['question_uuid']).first()
+        if not question or question.category_id != category.id:
+            logger.error(f"Question {data['question_uuid']} not found or does not belong to category {category_uuid}")
             return jsonify({'error': 'Question not found'}), 404
         
-        option = db.get(Option, data['option_id'])
+        option = g.db_session.query(Option).filter_by(uuid=data['option_uuid']).first()
         if not option or option.question_id != question.id:
-            logger.error(f"Option {data['option_id']} not found or does not belong to question {question.id}")
+            logger.error(f"Option {data['option_uuid']} not found or does not belong to question {question.uuid}")
             return jsonify({'error': 'Invalid option'}), 400
         
         # Record the attempt
@@ -182,20 +241,20 @@ def submit_answer(category_id):
             option_id=option.id,
             is_correct=option.is_correct
         )
-        db.add(attempt)
+        g.db_session.add(attempt)
         
         # Update user's knowledge state
-        user_category = db.query(UserCategory).filter_by(
+        user_category = g.db_session.query(UserCategory).filter_by(
             user_id=user.id,
-            category_id=category_id
+            category_id=category.id
         ).first()
         
         if not user_category:
             user_category = UserCategory(
                 user_id=user.id,
-                category_id=category_id
+                category_id=category.id
             )
-            db.add(user_category)
+            g.db_session.add(user_category)
         
         # Update knowledge state using BKT
         logger.debug(f"Current knowledge state before update: {user_category.current_knowledge}")
@@ -203,27 +262,35 @@ def submit_answer(category_id):
         logger.debug(f"New knowledge state after update: {user_category.current_knowledge}")
         
         # Commit all changes
-        db.commit()
+        g.db_session.commit()
         
         return jsonify({
-            'correct': option.is_correct,
-            'explanation': 'Correct!' if option.is_correct else 'Incorrect. Try again!',
+            'success': True,
+            'is_correct': option.is_correct,
             'knowledge_state': user_category.current_knowledge
         })
+            
     except Exception as e:
-        logger.error(f"Error in submit_answer: {str(e)}")
-        db.rollback()  # Rollback any uncommitted changes
-        return jsonify({'error': 'An error occurred while processing your answer'}), 500
+        logger.error(f"Error processing answer: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@user_bp.route('/category/<int:category_id>/history')
+@user_bp.route('/category/<uuid:category_uuid>/history')
 @login_required
-def get_learning_history(category_id):
+def get_learning_history(category_uuid):
     user = get_current_user()
     
+    # Convert uuid parameter to string for database lookup
+    category_uuid_str = str(category_uuid)
+    
+    # Get the category first
+    category = g.db_session.query(Category).filter_by(uuid=category_uuid_str).first()
+    if not category:
+        return jsonify({'error': 'Category not found'}), 404
+    
     # Get the user's attempt history for this category
-    attempts = db.query(AttemptLog).join(Question).filter(
+    attempts = g.db_session.query(AttemptLog).join(Question).filter(
         AttemptLog.user_id == user.id,
-        Question.category_id == category_id
+        Question.category_id == category.id
     ).order_by(AttemptLog.timestamp.desc()).all()
     
     history = [{
@@ -232,4 +299,25 @@ def get_learning_history(category_id):
         'result': 'Correct' if attempt.is_correct else 'Incorrect'
     } for attempt in attempts]
     
-    return jsonify(history) 
+    return jsonify(history)
+
+@user_bp.route('/section/<uuid:section_uuid>/categories')
+@login_required
+def section_categories(section_uuid):
+    user = get_current_user()
+    
+    # Get the section
+    section = g.db_session.query(Section).filter_by(uuid=str(section_uuid)).first()
+    if not section or section not in user.sections:
+        flash('Section not found or access denied.', 'error')
+        return redirect(url_for('user.dashboard'))
+    
+    # Get user's learning state for each category
+    user_categories = {
+        uc.category_id: uc for uc in g.db_session.query(UserCategory).filter_by(user_id=user.id).all()
+    }
+    
+    return render_template('user/section_categories.html',
+                         user=user,
+                         section=section,
+                         user_categories=user_categories) 

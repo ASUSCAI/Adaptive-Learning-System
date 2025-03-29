@@ -56,6 +56,12 @@
                         </span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Accuracy
+                        <span class="badge bg-info rounded-pill">
+                            {{ "%.1f%%"|format(progress.accuracy if progress else 0.0) }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
                         Status
                         <span class="badge {% if user_category.is_mastered() %}bg-success{% else %}bg-warning{% endif %} rounded-pill">
                             {{ "Mastered" if user_category.is_mastered() else "In Progress" }}
@@ -101,24 +107,76 @@
 let currentQuestion = null;
 let selectedOption = null;
 
+// Function to render markdown content safely
+function renderMarkdown(text) {
+    if (!window.md) {
+        console.error("Markdown-it not available");
+        return text;
+    }
+    try {
+        return window.md.render(text || "");
+    } catch (error) {
+        console.error("Error rendering markdown:", error);
+        return text;
+    }
+}
+
+// Function to apply syntax highlighting
+function applySyntaxHighlighting() {
+    if (typeof hljs !== 'undefined') {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
+}
+
 // Load initial question and history when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    loadQuestion();
-    loadHistory();
+    // Check if markdown is already ready
+    if (window.markdownReady) {
+        loadQuestion();
+        loadHistory();
+    } else {
+        // Wait for markdown to be ready
+        document.addEventListener('markdownReady', function() {
+            loadQuestion();
+            loadHistory();
+        });
+        
+        // Fallback in case the event never fires
+        setTimeout(() => {
+            if (!window.markdownReady) {
+                console.warn("Timeout waiting for markdown to be ready");
+                loadQuestion();
+                loadHistory();
+            }
+        }, 2000);
+    }
 });
 
 function loadQuestion() {
-    fetch(`/user/category/{{ category.id }}/next-question`)
+    console.log('Loading question for category:', '{{ category.uuid }}');  // Debug log
+    fetch(`/user/category/{{ category.uuid }}/next-question`)
         .then(response => {
+            console.log('Response status:', response.status);  // Debug log
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
+            console.log('Received data:', data);  // Debug log
             if (data.error) {
+                console.error('Error from server:', data.error);  // Debug log
                 document.getElementById('question-container').innerHTML = 
                     `<div class="alert alert-warning">${data.error}</div>`;
+                return;
+            }
+            
+            if (!data.text || !data.options || !data.question_uuid) {
+                console.error('Invalid data format:', data);  // Debug log
+                document.getElementById('question-container').innerHTML = 
+                    '<div class="alert alert-danger">Invalid question data received</div>';
                 return;
             }
             
@@ -126,15 +184,15 @@ function loadQuestion() {
             const optionsHtml = data.options.map(opt => `
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="options" 
-                           id="option${opt.id}" value="${opt.id}">
-                    <label class="form-check-label" for="option${opt.id}">
-                        ${opt.text}
+                           id="option${opt.uuid}" value="${opt.uuid}">
+                    <label class="form-check-label" for="option${opt.uuid}">
+                        <span class="markdown-content option-text" id="option-text-${opt.uuid}"></span>
                     </label>
                 </div>
             `).join('');
             
             document.getElementById('question-container').innerHTML = `
-                <p class="card-text">${data.text}</p>
+                <div class="markdown-content" id="question-text"></div>
                 <div class="mb-3">
                     ${optionsHtml}
                 </div>
@@ -142,6 +200,20 @@ function loadQuestion() {
                     <button class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>
                 </div>
             `;
+            
+            // Render markdown for question text
+            document.getElementById('question-text').innerHTML = renderMarkdown(data.text);
+            
+            // Render markdown for each option
+            data.options.forEach(opt => {
+                const optionElement = document.getElementById(`option-text-${opt.uuid}`);
+                if (optionElement) {
+                    optionElement.innerHTML = renderMarkdown(opt.text);
+                }
+            });
+            
+            // Apply syntax highlighting to question and options
+            applySyntaxHighlighting();
             
             // Add event listeners to radio buttons
             document.querySelectorAll('input[name="options"]').forEach(radio => {
@@ -153,7 +225,7 @@ function loadQuestion() {
         .catch(error => {
             console.error('Error loading question:', error);
             document.getElementById('question-container').innerHTML = 
-                '<div class="alert alert-danger">Error loading question. Please try again.</div>';
+                `<div class="alert alert-danger">Error loading question: ${error.message}</div>`;
         });
 }
 
@@ -163,26 +235,41 @@ function submitAnswer() {
         return;
     }
     
-    fetch(`/user/category/{{ category.id }}/submit-answer`, {
+    console.log('Submitting answer:', {  // Debug log
+        currentQuestion,
+        selectedOption
+    });
+    
+    const payload = {
+        question_uuid: currentQuestion.question_uuid,
+        option_uuid: selectedOption
+    };
+    
+    console.log('Sending payload:', payload);  // Debug log
+    
+    fetch(`/user/category/{{ category.uuid }}/submit-answer`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-            question_id: currentQuestion.question_id,
-            option_id: selectedOption
-        })
+        body: JSON.stringify(payload)
     })
     .then(response => {
+        console.log('Response status:', response.status);  // Debug log
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         return response.json();
     })
     .then(data => {
+        console.log('Response data:', data);  // Debug log
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
         const feedback = document.getElementById('answer-feedback');
-        feedback.textContent = data.explanation;
-        feedback.className = `alert ${data.correct ? 'alert-success' : 'alert-danger'}`;
+        feedback.textContent = data.explanation || (data.is_correct ? 'Correct!' : 'Incorrect!');
+        feedback.className = `alert ${data.is_correct ? 'alert-success' : 'alert-danger'}`;
         feedback.classList.remove('d-none');
         
         // Update the progress bar with the new knowledge state
@@ -192,22 +279,56 @@ function submitAnswer() {
         progressBar.setAttribute('aria-valuenow', progressValue);
         progressBar.textContent = `${progressValue}%`;
         
-        if (data.correct) {
-            setTimeout(() => {
-                loadQuestion();
-                loadHistory();
-                feedback.classList.add('d-none');
-            }, 2000);
+        // Update the knowledge state display
+        const knowledgeStateBadge = document.querySelector('.badge.bg-primary');
+        if (knowledgeStateBadge) {
+            knowledgeStateBadge.textContent = data.knowledge_state.toFixed(2);
         }
+        
+        // Update accuracy display
+        const accuracyBadge = document.querySelector('.badge.bg-info');
+        if (accuracyBadge && data.accuracy !== undefined) {
+            accuracyBadge.textContent = data.accuracy.toFixed(1) + '%';
+        }
+        
+        // Update mastery status if needed
+        if (progressValue >= 95) {
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-success');
+            const statusBadge = document.querySelector('.badge.bg-warning');
+            if (statusBadge) {
+                statusBadge.classList.remove('bg-warning');
+                statusBadge.classList.add('bg-success');
+                statusBadge.textContent = 'Mastered';
+            }
+        }
+        
+        // Add a next question button
+        const nextQuestionBtn = document.createElement('button');
+        nextQuestionBtn.className = 'btn btn-primary mt-3';
+        nextQuestionBtn.textContent = 'Next Question';
+        nextQuestionBtn.onclick = function() {
+            loadQuestion();
+            loadHistory();
+            feedback.classList.add('d-none');
+            // Remove the button after clicking
+            this.remove();
+        };
+        
+        // Add the button after the answer feedback
+        feedback.after(nextQuestionBtn);
     })
     .catch(error => {
         console.error('Error submitting answer:', error);
-        alert('Error submitting answer. Please try again.');
+        const feedback = document.getElementById('answer-feedback');
+        feedback.textContent = 'Error submitting answer. Please try again.';
+        feedback.className = 'alert alert-danger';
+        feedback.classList.remove('d-none');
     });
 }
 
 function loadHistory() {
-    fetch(`/user/category/{{ category.id }}/history`)
+    fetch(`/user/category/{{ category.uuid }}/history`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -215,37 +336,36 @@ function loadHistory() {
             return response.json();
         })
         .then(data => {
-            const tbody = document.getElementById('history-body');
             if (data.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="3" class="text-center">No history available</td>
-                    </tr>
-                `;
+                document.getElementById('history-body').innerHTML = 
+                    '<tr><td colspan="3" class="text-center">No history available yet</td></tr>';
                 return;
             }
             
-            tbody.innerHTML = data.map(item => `
-                <tr>
-                    <td>${item.date}</td>
-                    <td>${item.question}</td>
-                    <td>
-                        <span class="badge ${item.result === 'Correct' ? 'bg-success' : 'bg-danger'}">
-                            ${item.result}
-                        </span>
-                    </td>
-                </tr>
-            `).join('');
+            const historyRows = data.map(item => {
+                const renderedQuestion = renderMarkdown(item.question);
+                return `
+                    <tr>
+                        <td>${item.date}</td>
+                        <td class="markdown-content">${renderedQuestion}</td>
+                        <td>
+                            <span class="badge ${item.result === 'Correct' ? 'bg-success' : 'bg-danger'} rounded-pill">
+                                ${item.result}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('history-body').innerHTML = historyRows;
+            
+            // Apply syntax highlighting to code blocks in history
+            applySyntaxHighlighting();
         })
         .catch(error => {
             console.error('Error loading history:', error);
-            document.getElementById('history-body').innerHTML = `
-                <tr>
-                    <td colspan="3" class="text-center text-danger">
-                        Error loading history. Please try again.
-                    </td>
-                </tr>
-            `;
+            document.getElementById('history-body').innerHTML = 
+                `<tr><td colspan="3" class="text-center text-danger">Error: ${error.message}</td></tr>`;
         });
 }
 </script>

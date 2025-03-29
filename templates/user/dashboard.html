@@ -6,59 +6,70 @@
 <div class="row mb-4">
     <div class="col">
         <h2>Welcome, {{ user.name }}!</h2>
-        <p class="text-muted">Track your learning progress across different categories.</p>
+        <p class="text-muted">Track your learning progress across different sections.</p>
     </div>
 </div>
 
+<!-- Sections the user belongs to -->
+{% if sections %}
 <div class="row">
-    {% for category in categories %}
-    <div class="col-md-4 mb-4">
-        <div class="card category-card h-100">
+    <div class="col">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h4>Your Sections</h4>
+            </div>
             <div class="card-body">
-                <h5 class="card-title">{{ category.name }}</h5>
-                {% set user_category = user_categories.get(category.id) %}
-                {% if user_category %}
-                    <div class="progress">
-                        <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
-                             role="progressbar"
-                             style="width: {{ (user_category.current_knowledge * 100)|round }}%"
-                             aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
-                             aria-valuemin="0"
-                             aria-valuemax="100">
-                            {{ (user_category.current_knowledge * 100)|round }}%
+                <div class="row">
+                    {% for section in sections %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ section.name }}</h5>
+                                {% if section.description %}
+                                <p class="card-text">{{ section.description }}</p>
+                                {% endif %}
+                                {% set section_progress = 0 %}
+                                {% set total_categories = section.categories|length %}
+                                {% if total_categories > 0 %}
+                                    {% for category in section.categories %}
+                                        {% if category.id in user_categories %}
+                                            {% set section_progress = section_progress + user_categories[category.id].current_knowledge %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% set section_progress = (section_progress / total_categories) * 100 %}
+                                {% endif %}
+                                <div class="progress mb-2">
+                                    <div class="progress-bar {% if section_progress >= 95 %}bg-success{% else %}bg-primary{% endif %}"
+                                         role="progressbar"
+                                         style="width: {{ section_progress|round }}%"
+                                         aria-valuenow="{{ section_progress|round }}"
+                                         aria-valuemin="0"
+                                         aria-valuemax="100">
+                                        {{ section_progress|round }}%
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-primary">{{ total_categories }} Categories</span>
+                                    <a href="{{ url_for('user.section_categories', section_uuid=section.uuid) }}" class="btn btn-outline-primary">
+                                        View Categories
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    {% if user_category.is_mastered() %}
-                        <div class="badge bg-success mb-2">Mastered!</div>
-                    {% endif %}
-                {% else %}
-                    <div class="progress">
-                        <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%">0%</div>
-                    </div>
-                {% endif %}
-                <p class="card-text">
-                    {% if user_category %}
-                        Current knowledge state: {{ "%.2f"|format(user_category.current_knowledge) }}
-                    {% else %}
-                        Not started yet
-                    {% endif %}
-                </p>
-                <a href="{{ url_for('user.category_detail', category_id=category.id) }}" class="btn btn-primary">
-                    {% if user_category and user_category.is_mastered() %}
-                        Review
-                    {% else %}
-                        Learn
-                    {% endif %}
-                </a>
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </div>
-    {% else %}
+</div>
+{% else %}
+<div class="row">
     <div class="col">
         <div class="alert alert-info">
-            No categories available yet. Please check back later.
+            You haven't been assigned to any sections yet. Please contact your administrator.
         </div>
     </div>
-    {% endfor %}
 </div>
+{% endif %}
 {% endblock %} 

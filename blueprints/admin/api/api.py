@@ -48,7 +48,7 @@ def add_question():
     Expects a JSON payload with:
     {
       "text": "Question text",
-      "category_name": "Category name",
+      "category_uuid": "Category UUID",
       "options": [
           {"text": "Option A", "is_correct": false},
           {"text": "Option B", "is_correct": true},
@@ -61,31 +61,38 @@ def add_question():
     session = db.get_session()
     data = request.get_json()
 
-    # 1. Extract question text and category name from the payload
+    # 1. Extract question text and category UUID from the payload
     question_text = data.get("text")
-    category_name = data.get("category_name")
+    category_uuid = data.get("category_uuid")
     options_data = data.get("options", [])
 
-    if not question_text or not category_name:
-        return jsonify({"error": "Question text or category name is missing."}), 400
+    if not question_text or not category_uuid:
+        return jsonify({"error": "Question text or category UUID is missing."}), 400
 
-    # 2. Find the category by name
-    category = session.query(Category).filter_by(name=category_name).first()
+    # 2. Find the category by UUID
+    category = session.query(Category).filter_by(uuid=category_uuid).first()
     if not category:
-        return jsonify({"error": f"Category '{category_name}' not found."}), 400
+        return jsonify({"error": f"Category with UUID '{category_uuid}' not found."}), 400
 
     # 3. Create the Question object
-    new_question = Question(text=question_text, category_id=category.id, uuid = str(uuid4()))
+    new_question = Question(text=question_text, category_id=category.id, uuid=str(uuid4()))
 
     # 4. Create and attach the Option objects
     for opt in options_data:
         opt_text = opt.get("text", "")
         is_correct = opt.get("is_correct", False)
-        new_option = Option(text=opt_text, is_correct=is_correct, uuid = str(uuid4()))
+        new_option = Option(text=opt_text, is_correct=is_correct, uuid=str(uuid4()))
         new_question.options.append(new_option)
 
     # 5. Persist to database
     session.add(new_question)
     session.commit()
 
-    return jsonify({"message": "Question added successfully"}), 201
+    return jsonify({
+        "message": "Question added successfully",
+        "question": {
+            "uuid": new_question.uuid,
+            "text": new_question.text,
+            "options": [{"uuid": opt.uuid, "text": opt.text, "is_correct": opt.is_correct} for opt in new_question.options]
+        }
+    }), 201

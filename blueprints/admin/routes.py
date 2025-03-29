@@ -1,5 +1,6 @@
-from flask import render_template, redirect, url_for, flash, request, session, jsonify
-from database.models import User, Category, UserCategory, Question, Option
+from flask import render_template, redirect, url_for, flash, request, session, jsonify, Blueprint, g
+from werkzeug.security import generate_password_hash
+from database.models import User, Category, UserCategory, Question, Option, Section
 from shared import db
 from functools import wraps
 from typing import Optional
@@ -161,10 +162,10 @@ def remove_category(user_id, category_id):
     
     return redirect(url_for('admin.manage_user_categories', user_id=user_id))
 
-@admin_bp.route('/categories/<int:category_id>/questions/add', methods=['GET', 'POST'])
+@admin_bp.route('/categories/<uuid:category_uuid>/questions/add', methods=['GET', 'POST'])
 @admin_required
-def add_question(category_id):
-    category = db.get(Category, category_id)
+def add_question(category_uuid):
+    category = db.query(Category).filter_by(uuid=category_uuid).first()
     if not category:
         flash('Category not found.', 'error')
         return redirect(url_for('admin.manage_categories'))
@@ -176,9 +177,9 @@ def add_question(category_id):
         
         if not text or not options or not correct_option:
             flash('All fields are required.', 'error')
-            return redirect(url_for('admin.add_question', category_id=category_id))
+            return redirect(url_for('admin.add_question', category_uuid=category_uuid))
         
-        question = Question(text=text, category_id=category_id, uuid=str(uuid.uuid4()))
+        question = Question(text=text, category_id=category.id, uuid=str(uuid.uuid4()))
         db.add(question)
         
         for i, option_text in enumerate(options):
@@ -195,11 +196,11 @@ def add_question(category_id):
     
     return render_template('admin/question_form.html', category=category)
 
-@admin_bp.route('/questions/<int:question_id>/edit', methods=['GET', 'POST'])
+@admin_bp.route('/questions/<uuid:question_uuid>/edit', methods=['GET', 'POST'])
 @admin_required
-def edit_question(question_id):
+def edit_question(question_uuid):
     # Get question with options eagerly loaded
-    question = db.query(Question).filter_by(id=question_id).options(
+    question = db.query(Question).filter_by(uuid=question_uuid).options(
         joinedload(Question.options)
     ).first()
     
@@ -214,19 +215,20 @@ def edit_question(question_id):
         
         if not text or not options or not correct_option:
             flash('All fields are required.', 'error')
-            return redirect(url_for('admin.edit_question', question_id=question_id))
+            return redirect(url_for('admin.edit_question', question_uuid=question_uuid))
         
         question.text = text
         
         # Delete existing options
-        db.query(Option).filter_by(question_id=question_id).delete()
+        db.query(Option).filter_by(question_id=question.id).delete()
         
         # Add new options
         for i, option_text in enumerate(options):
             option = Option(
                 text=option_text,
                 is_correct=(str(i) == correct_option),
-                question_id=question_id
+                question_id=question.id,
+                uuid=str(uuid.uuid4())
             )
             db.add(option)
         
@@ -235,52 +237,307 @@ def edit_question(question_id):
     
     return render_template('admin/question_form.html', question=question)
 
-@admin_bp.route('/questions/<int:question_id>', methods=['DELETE'])
+@admin_bp.route('/questions/<uuid:question_uuid>', methods=['DELETE'])
 @admin_required
-def delete_question(question_id):
-    question = db.get(Question, question_id)
+def delete_question(question_uuid):
+    question = db.query(Question).filter_by(uuid=question_uuid).first()
     if not question:
         return jsonify({'success': False, 'error': 'Question not found'}), 404
     
     # Delete all options first
-    db.query(Option).filter_by(question_id=question_id).delete()
+    db.query(Option).filter_by(question_id=question.id).delete()
     # Then delete the question
-    db.query(Question).filter_by(id=question_id).delete()
+    db.query(Question).filter_by(uuid=question_uuid).delete()
     
     return jsonify({'success': True})
 
-@admin_bp.route('/api/categories/<int:category_id>/questions')
+@admin_bp.route('/api/categories/<uuid:category_uuid>/questions')
 @admin_required
-def get_category_questions(category_id):
+def get_category_questions(category_uuid):
     """API endpoint to fetch questions for a category"""
-    questions = db.query(Question).filter_by(category_id=category_id).options(
+    category = db.query(Category).filter_by(uuid=category_uuid).first()
+    if not category:
+        return jsonify({'error': 'Category not found'}), 404
+        
+    questions = db.query(Question).filter_by(category_id=category.id).options(
         joinedload(Question.options)
     ).all()
     
     return jsonify([{
-        'id': q.id,
+        'uuid': q.uuid,
         'text': q.text,
         'options': [{
-            'id': opt.id,
+            'uuid': opt.uuid,
             'text': opt.text,
             'is_correct': opt.is_correct
         } for opt in q.options]
     } for q in questions])
 
-@admin_bp.route('/categories/<int:category_id>/questions')
+@admin_bp.route('/categories/<uuid:category_uuid>/questions')
 @admin_required
-def view_category_questions(category_id):
+def view_category_questions(category_uuid):
     """View questions for a specific category"""
-    category = db.get(Category, category_id)
+    category = db.query(Category).filter_by(uuid=category_uuid).first()
     if not category:
         flash('Category not found.', 'error')
         return redirect(url_for('admin.manage_categories'))
     
     # Get questions with options eagerly loaded
-    questions = db.query(Question).filter_by(category_id=category_id).options(
+    questions = db.query(Question).filter_by(category_id=category.id).options(
         joinedload(Question.options)
     ).all()
     
     return render_template('admin/category_questions.html',
                          category=category,
-                         questions=questions) 
+                         questions=questions)
+
+# Section Management Routes
+@admin_bp.route('/sections')
+@admin_required
+def manage_sections():
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        sections = session.query(Section).all()
+        return render_template('admin/sections/index.html', sections=sections)
+    finally:
+        session.close()
+
+@admin_bp.route('/sections/new', methods=['GET', 'POST'])
+@admin_required
+def new_section():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+        
+        if not name:
+            flash('Section name is required.', 'error')
+            return redirect(url_for('admin.new_section'))
+        
+        # Get a new session
+        session = db.get_session()
+        
+        try:
+            # Check if section with same name already exists
+            existing = session.query(Section).filter_by(name=name).first()
+            if existing:
+                flash('A section with this name already exists.', 'error')
+                return redirect(url_for('admin.new_section'))
+            
+            section = Section(
+                name=name,
+                description=description,
+                uuid=str(uuid.uuid4())
+            )
+            session.add(section)
+            session.commit()
+            flash('Section created successfully!', 'success')
+            return redirect(url_for('admin.manage_sections'))
+        except Exception as e:
+            session.rollback()
+            flash(f'Error creating section: {str(e)}', 'error')
+            return redirect(url_for('admin.new_section'))
+        finally:
+            session.close()
+    
+    return render_template('admin/sections/new.html')
+
+@admin_bp.route('/sections/<uuid:section_uuid>')
+@admin_required
+def section_detail(section_uuid):
+    section_uuid_str = str(section_uuid)
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        # Eagerly load both users and categories relationships
+        section = session.query(Section).options(
+            joinedload(Section.users),
+            joinedload(Section.categories)
+        ).filter_by(uuid=section_uuid_str).first()
+        
+        if not section:
+            flash('Section not found.', 'error')
+            return redirect(url_for('admin.manage_sections'))
+        
+        users = session.query(User).all()
+        categories = session.query(Category).all()
+        
+        return render_template('admin/sections/detail.html',
+                            section=section,
+                            all_users=users,
+                            all_categories=categories)
+    finally:
+        session.close()
+
+@admin_bp.route('/sections/<uuid:section_uuid>/users/add', methods=['POST'])
+@admin_required
+def add_user_to_section(section_uuid):
+    section_uuid_str = str(section_uuid)
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        # Eagerly load users relationship
+        section = session.query(Section).options(joinedload(Section.users)).filter_by(uuid=section_uuid_str).first()
+        
+        if not section:
+            flash('Section not found.', 'error')
+            return redirect(url_for('admin.manage_sections'))
+        
+        user_id = request.form.get('user_id')
+        if not user_id:
+            flash('User is required.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        user = session.query(User).get(user_id)
+        if not user:
+            flash('User not found.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        if user in section.users:
+            flash('User is already in this section.', 'warning')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        section.users.append(user)
+        session.commit()
+        flash('User added to section successfully!', 'success')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error adding user to section: {str(e)}', 'error')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    finally:
+        session.close()
+
+@admin_bp.route('/sections/<uuid:section_uuid>/users/<int:user_id>/remove')
+@admin_required
+def remove_user_from_section(section_uuid, user_id):
+    section_uuid_str = str(section_uuid)
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        # Eagerly load users relationship
+        section = session.query(Section).options(joinedload(Section.users)).filter_by(uuid=section_uuid_str).first()
+        
+        if not section:
+            flash('Section not found.', 'error')
+            return redirect(url_for('admin.manage_sections'))
+        
+        user = session.query(User).get(user_id)
+        if not user:
+            flash('User not found.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        if user not in section.users:
+            flash('User is not in this section.', 'warning')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        section.users.remove(user)
+        session.commit()
+        flash('User removed from section successfully!', 'success')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error removing user from section: {str(e)}', 'error')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    finally:
+        session.close()
+
+@admin_bp.route('/sections/<uuid:section_uuid>/categories/add', methods=['POST'])
+@admin_required
+def add_category_to_section(section_uuid):
+    section_uuid_str = str(section_uuid)
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        # Use joinedload to eagerly load the categories relationship
+        section = session.query(Section).options(
+            joinedload(Section.categories),
+            joinedload(Section.users)
+        ).filter_by(uuid=section_uuid_str).first()
+        
+        if not section:
+            flash('Section not found.', 'error')
+            return redirect(url_for('admin.manage_sections'))
+        
+        category_id = request.form.get('category_id')
+        if not category_id:
+            flash('Category is required.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        category = session.query(Category).get(category_id)
+        if not category:
+            flash('Category not found.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        # Check if category is already in this section (now safe because categories is eagerly loaded)
+        if category in section.categories:
+            flash('Category is already in this section.', 'warning')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        section.categories.append(category)
+        
+        # Auto-assign this category to all users in the section
+        for user in section.users:
+            # Check if user already has this category
+            existing = session.query(UserCategory).filter_by(
+                user_id=user.id,
+                category_id=category.id
+            ).first()
+            
+            if not existing:
+                user_category = UserCategory(
+                    user_id=user.id,
+                    category_id=category.id
+                )
+                session.add(user_category)
+        
+        session.commit()
+        flash('Category added to section successfully!', 'success')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error adding category to section: {str(e)}', 'error')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    finally:
+        session.close()
+
+@admin_bp.route('/sections/<uuid:section_uuid>/categories/<int:category_id>/remove')
+@admin_required
+def remove_category_from_section(section_uuid, category_id):
+    section_uuid_str = str(section_uuid)
+    # Get a new session
+    session = db.get_session()
+    
+    try:
+        # Use joinedload to eagerly load the categories relationship
+        section = session.query(Section).options(joinedload(Section.categories)).filter_by(uuid=section_uuid_str).first()
+        
+        if not section:
+            flash('Section not found.', 'error')
+            return redirect(url_for('admin.manage_sections'))
+        
+        category = session.query(Category).get(category_id)
+        if not category:
+            flash('Category not found.', 'error')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        # Safe to check relationship now that categories is eagerly loaded
+        if category not in section.categories:
+            flash('Category is not in this section.', 'warning')
+            return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+        
+        section.categories.remove(category)
+        session.commit()
+        flash('Category removed from section successfully!', 'success')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error removing category from section: {str(e)}', 'error')
+        return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
+    finally:
+        session.close() 

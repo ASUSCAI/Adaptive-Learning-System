@@ -34,17 +34,17 @@
                             </button>
                         </div>
                         {% endfor %}
-                    {% else %}
-                        <div class="input-group mb-2">
-                            <div class="input-group-text">
-                                <input type="radio" name="correct_option" value="0" required>
-                            </div>
-                            <input type="text" class="form-control" name="options[]" required>
-                            <button type="button" class="btn btn-outline-danger" onclick="removeOption(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
                     {% endif %}
+                    
+                    <div class="input-group mb-2">
+                        <div class="input-group-text">
+                            <input type="radio" name="correct_option" value="0" required>
+                        </div>
+                        <input type="text" class="form-control" name="options[]" required>
+                        <button type="button" class="btn btn-outline-danger" onclick="removeOption(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="button" class="btn btn-outline-primary" onclick="addOption()">
                     <i class="bi bi-plus-circle"></i> Add Option
@@ -68,33 +68,26 @@
 <script>
 function addOption() {
     const container = document.getElementById('options-container');
-    const optionCount = container.children.length;
-    
-    const div = document.createElement('div');
-    div.className = 'input-group mb-2';
-    div.innerHTML = `
+    const newOption = document.createElement('div');
+    newOption.className = 'input-group mb-2';
+    newOption.innerHTML = `
         <div class="input-group-text">
-            <input type="radio" name="correct_option" value="${optionCount}" required>
+            <input type="radio" name="correct_option" value="${container.children.length}" required>
         </div>
         <input type="text" class="form-control" name="options[]" required>
         <button type="button" class="btn btn-outline-danger" onclick="removeOption(this)">
             <i class="bi bi-trash"></i>
         </button>
     `;
-    
-    container.appendChild(div);
+    container.appendChild(newOption);
 }
 
 function removeOption(button) {
     const container = document.getElementById('options-container');
     if (container.children.length > 1) {
         button.closest('.input-group').remove();
-        // Update radio button values
-        container.querySelectorAll('input[type="radio"]').forEach((radio, index) => {
-            radio.value = index;
-        });
     } else {
-        alert('A question must have at least one option.');
+        alert('Cannot remove the last option');
     }
 }
 </script>

@@ -1,0 +1,76 @@
+{% extends "user/base.html" %}
+
+{% block title %}{{ section.name }} - Categories{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>{{ section.name }}</h2>
+            <a href="{{ url_for('user.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+        {% if section.description %}
+        <p class="text-muted">{{ section.description }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h4>Categories in this Section</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for category in section.categories %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card category-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ category.name }}</h5>
+                                {% set user_category = user_categories.get(category.id) %}
+                                {% if user_category %}
+                                    <div class="progress mb-2">
+                                        <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
+                                            role="progressbar"
+                                            style="width: {{ (user_category.current_knowledge * 100)|round }}%"
+                                            aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
+                                            aria-valuemin="0"
+                                            aria-valuemax="100">
+                                            {{ (user_category.current_knowledge * 100)|round }}%
+                                        </div>
+                                    </div>
+                                    {% if user_category.is_mastered() %}
+                                        <div class="badge bg-success mb-2">Mastered!</div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="progress mb-2">
+                                        <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%">0%</div>
+                                    </div>
+                                {% endif %}
+                                
+                                <a href="{{ url_for('user.category_detail', category_uuid=category.uuid) }}" class="btn btn-primary">
+                                    {% if user_category and user_category.is_mastered() %}
+                                        Review
+                                    {% else %}
+                                        Learn
+                                    {% endif %}
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col">
+                        <div class="alert alert-info">
+                            No categories available in this section yet.
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

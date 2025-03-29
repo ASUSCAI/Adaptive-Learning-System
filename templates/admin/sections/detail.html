@@ -1,0 +1,141 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ section.name }} - Section Management{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>{{ section.name }}</h2>
+        <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Sections
+        </a>
+    </div>
+
+    {% if section.description %}
+    <div class="alert alert-info">
+        {{ section.description }}
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Users in Section -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h4>Users in Section</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.add_user_to_section', section_uuid=section.uuid) }}" class="mb-4">
+                        <div class="input-group">
+                            <select name="user_id" class="form-select" required>
+                                <option value="">Select User to Add...</option>
+                                {% for user in all_users %}
+                                    {% if user not in section.users %}
+                                    <option value="{{ user.id }}">{{ user.name }} ({{ user.email }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Add
+                            </button>
+                        </div>
+                    </form>
+
+                    {% if section.users %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for user in section.users %}
+                                        <tr>
+                                            <td>{{ user.name }}</td>
+                                            <td>{{ user.email }}</td>
+                                            <td>
+                                                <a href="{{ url_for('admin.remove_user_from_section', section_uuid=section.uuid, user_id=user.id) }}" 
+                                                   class="btn btn-sm btn-outline-danger"
+                                                   onclick="return confirm('Are you sure you want to remove this user from the section?')">
+                                                    <i class="bi bi-x-circle"></i> Remove
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            No users have been added to this section yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories in Section -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h4>Categories in Section</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.add_category_to_section', section_uuid=section.uuid) }}" class="mb-4">
+                        <div class="input-group">
+                            <select name="category_id" class="form-select" required>
+                                <option value="">Select Category to Add...</option>
+                                {% for category in all_categories %}
+                                    {% if category not in section.categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Add
+                            </button>
+                        </div>
+                        <div class="form-text mt-2">
+                            Note: Adding a category will automatically assign it to all users in this section.
+                        </div>
+                    </form>
+
+                    {% if section.categories %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for category in section.categories %}
+                                        <tr>
+                                            <td>{{ category.name }}</td>
+                                            <td>
+                                                <a href="{{ url_for('admin.remove_category_from_section', section_uuid=section.uuid, category_id=category.id) }}" 
+                                                   class="btn btn-sm btn-outline-danger"
+                                                   onclick="return confirm('Are you sure you want to remove this category from the section?')">
+                                                    <i class="bi bi-x-circle"></i> Remove
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            No categories have been added to this section yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
