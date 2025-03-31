@@ -1,20 +1,34 @@
 {% extends "admin/base.html" %}
 
-{% block admin_title %}Manage Categories for {{ user.name }}{% endblock %}
+{% block admin_title %}Manage Learning Objectives for {{ user.name }}{% endblock %}
 
 {% block admin_content %}
+<div class="row mb-3">
+    <div class="col-md-8 d-flex justify-content-between align-items-center">
+        <h3>{{ user.name }}'s Learning Progress</h3>
+        {% if user_categories %}
+        <form method="POST" action="{{ url_for('admin.reset_all_user_progress', user_id=user.id) }}" style="display: inline;">
+            <button type="submit" class="btn btn-warning" 
+                    onclick="return confirm('Are you sure you want to reset progress for ALL learning objectives for this user? This cannot be undone.')">
+                <i class="bi bi-arrow-repeat"></i> Reset All Progress
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-8">
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="card-title mb-0">Assigned Categories</h5>
+                <h5 class="card-title mb-0">Assigned Learning Objectives</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Category</th>
+                                <th>Learning Objective</th>
                                 <th>Knowledge State</th>
                                 <th>Status</th>
                                 <th>Actions</th>
@@ -45,19 +59,28 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <form method="POST" action="{{ url_for('admin.remove_category', user_id=user.id, category_id=category.id) }}" 
-                                              style="display: inline;">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" 
-                                                    onclick="return confirm('Are you sure you want to remove this category?')">
-                                                <i class="bi bi-trash"></i> Remove
-                                            </button>
-                                        </form>
+                                        <div class="btn-group" role="group">
+                                            <form method="POST" action="{{ url_for('admin.reset_user_progress', user_id=user.id, category_id=category.id) }}" 
+                                                  style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-outline-warning" 
+                                                        onclick="return confirm('Are you sure you want to reset progress for this learning objective? This will set knowledge state back to initial value.')">
+                                                    <i class="bi bi-arrow-counterclockwise"></i> Reset Progress
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ url_for('admin.remove_category', user_id=user.id, category_id=category.id) }}" 
+                                                  style="display: inline; margin-left: 5px;">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                                        onclick="return confirm('Are you sure you want to remove this learning objective?')">
+                                                    <i class="bi bi-trash"></i> Remove
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endif %}
                             {% else %}
                             <tr>
-                                <td colspan="4" class="text-center">No categories assigned.</td>
+                                <td colspan="4" class="text-center">No learning objectives assigned.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -70,14 +93,14 @@
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Assign New Category</h5>
+                <h5 class="card-title mb-0">Assign New Learning Objective</h5>
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('admin.assign_category', user_id=user.id) }}">
                     <div class="mb-3">
-                        <label for="category_id" class="form-label">Select Category</label>
+                        <label for="category_id" class="form-label">Select Learning Objective</label>
                         <select class="form-select" id="category_id" name="category_id" required>
-                            <option value="">Choose a category...</option>
+                            <option value="">Choose a learning objective...</option>
                             {% for category in categories %}
                                 {% if category.id not in user_categories %}
                                 <option value="{{ category.id }}">{{ category.name }}</option>
@@ -85,7 +108,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Assign Category</button>
+                    <button type="submit" class="btn btn-primary w-100">Assign Learning Objective</button>
                 </form>
             </div>
         </div>

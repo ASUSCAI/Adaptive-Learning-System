@@ -1,100 +1,102 @@
 {% extends "user/base.html" %}
 
-{% block title %}{{ category.name }} - Adaptive Learning System{% endblock %}
+{% block title %}{{ category.name }} - Learning Objective{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col">
-        <h2>{{ category.name }}</h2>
-        <div class="progress mb-3">
-            <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
-                 role="progressbar"
-                 style="width: {{ (user_category.current_knowledge * 100)|round }}%"
-                 aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
-                 aria-valuemin="0"
-                 aria-valuemax="100">
-                {{ (user_category.current_knowledge * 100)|round }}%
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>{{ category.name }}</h2>
+            <div class="progress mb-3">
+                <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
+                     role="progressbar"
+                     style="width: {{ (user_category.current_knowledge * 100)|round }}%"
+                     aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
+                     aria-valuemin="0"
+                     aria-valuemax="100">
+                    {{ (user_category.current_knowledge * 100)|round }}%
+                </div>
             </div>
+            {% if user_category.is_mastered() %}
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> Congratulations! You have mastered this learning objective!
+                </div>
+            {% endif %}
         </div>
-        {% if user_category.is_mastered() %}
-            <div class="alert alert-success">
-                <i class="bi bi-check-circle"></i> Congratulations! You have mastered this category!
-            </div>
-        {% endif %}
     </div>
-</div>
 
-<div class="row">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h4>Current Question</h4>
-            </div>
-            <div class="card-body">
-                <div id="question-container">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Current Question</h4>
+                </div>
+                <div class="card-body">
+                    <div id="question-container">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
                         </div>
                     </div>
+                    <div id="answer-feedback" class="alert d-none"></div>
                 </div>
-                <div id="answer-feedback" class="alert d-none"></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Learning Statistics</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Knowledge State
+                            <span class="badge bg-primary rounded-pill">
+                                {{ "%.2f"|format(user_category.current_knowledge) }}
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Accuracy
+                            <span class="badge bg-info rounded-pill">
+                                {{ "%.1f%%"|format(progress.accuracy if progress else 0.0) }}
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Status
+                            <span class="badge {% if user_category.is_mastered() %}bg-success{% else %}bg-warning{% endif %} rounded-pill">
+                                {{ "Mastered" if user_category.is_mastered() else "In Progress" }}
+                            </span>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <h4>Learning Statistics</h4>
-            </div>
-            <div class="card-body">
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Knowledge State
-                        <span class="badge bg-primary rounded-pill">
-                            {{ "%.2f"|format(user_category.current_knowledge) }}
-                        </span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Accuracy
-                        <span class="badge bg-info rounded-pill">
-                            {{ "%.1f%%"|format(progress.accuracy if progress else 0.0) }}
-                        </span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Status
-                        <span class="badge {% if user_category.is_mastered() %}bg-success{% else %}bg-warning{% endif %} rounded-pill">
-                            {{ "Mastered" if user_category.is_mastered() else "In Progress" }}
-                        </span>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="row mt-4">
-    <div class="col">
-        <div class="card">
-            <div class="card-header">
-                <h4>Learning History</h4>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Question</th>
-                                <th>Result</th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-body">
-                            <tr>
-                                <td colspan="3" class="text-center">Loading history...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+    <div class="row mt-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Learning History</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Question</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-body">
+                                <tr>
+                                    <td colspan="3" class="text-center">Loading history...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -107,31 +109,8 @@
 let currentQuestion = null;
 let selectedOption = null;
 
-// Function to render markdown content safely
-function renderMarkdown(text) {
-    if (!window.md) {
-        console.error("Markdown-it not available");
-        return text;
-    }
-    try {
-        return window.md.render(text || "");
-    } catch (error) {
-        console.error("Error rendering markdown:", error);
-        return text;
-    }
-}
-
-// Function to apply syntax highlighting
-function applySyntaxHighlighting() {
-    if (typeof hljs !== 'undefined') {
-        document.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightElement(block);
-        });
-    }
-}
-
-// Load initial question and history when page loads
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize highlighting libraries
+document.addEventListener('DOMContentLoaded', function() {
     // Check if markdown is already ready
     if (window.markdownReady) {
         loadQuestion();
@@ -154,50 +133,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+function renderMarkdown(text) {
+    if (!window.md) {
+        console.error("Markdown-it not available");
+        return text;
+    }
+    try {
+        return window.md.render(text || "");
+    } catch (error) {
+        console.error("Error rendering markdown:", error);
+        return text;
+    }
+}
+
+function applySyntaxHighlighting() {
+    if (typeof hljs !== 'undefined') {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
+}
+
 function loadQuestion() {
-    console.log('Loading question for category:', '{{ category.uuid }}');  // Debug log
+    selectedOption = null;  // Reset selected option
+    
+    document.getElementById('question-container').innerHTML = 
+        `<div class="text-center"><div class="spinner-border" role="status"></div><p>Loading question...</p></div>`;
+    
     fetch(`/user/category/{{ category.uuid }}/next-question`)
         .then(response => {
-            console.log('Response status:', response.status);  // Debug log
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Received data:', data);  // Debug log
-            if (data.error) {
-                console.error('Error from server:', data.error);  // Debug log
-                document.getElementById('question-container').innerHTML = 
-                    `<div class="alert alert-warning">${data.error}</div>`;
-                return;
-            }
-            
-            if (!data.text || !data.options || !data.question_uuid) {
-                console.error('Invalid data format:', data);  // Debug log
-                document.getElementById('question-container').innerHTML = 
-                    '<div class="alert alert-danger">Invalid question data received</div>';
-                return;
-            }
-            
+            console.log('Question data:', data);
             currentQuestion = data;
+            
             const optionsHtml = data.options.map(opt => `
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="options" 
-                           id="option${opt.uuid}" value="${opt.uuid}">
-                    <label class="form-check-label" for="option${opt.uuid}">
-                        <span class="markdown-content option-text" id="option-text-${opt.uuid}"></span>
+                <div class="form-check mb-3 p-3 border rounded option-container">
+                    <input class="form-check-input" type="radio" name="options" id="option-${opt.uuid}" value="${opt.uuid}">
+                    <label class="form-check-label w-100" for="option-${opt.uuid}">
+                        <div id="option-text-${opt.uuid}" class="markdown-content">${opt.text}</div>
                     </label>
                 </div>
             `).join('');
             
             document.getElementById('question-container').innerHTML = `
-                <div class="markdown-content" id="question-text"></div>
-                <div class="mb-3">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <p class="card-text markdown-content" id="question-text">${data.text}</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="fw-bold">Select your answer:</p>
                     ${optionsHtml}
                 </div>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>
+                    <button id="submit-button" class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>
+                    <div id="answer-feedback" class="alert d-none mt-3"></div>
+                    <div id="next-button-container" class="d-none mt-2"></div>
                 </div>
             `;
             
@@ -235,7 +231,14 @@ function submitAnswer() {
         return;
     }
     
-    console.log('Submitting answer:', {  // Debug log
+    // Disable the submit button to prevent multiple submissions
+    const submitBtn = document.getElementById('submit-button');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+    }
+    
+    console.log('Submitting answer:', {
         currentQuestion,
         selectedOption
     });
@@ -245,7 +248,7 @@ function submitAnswer() {
         option_uuid: selectedOption
     };
     
-    console.log('Sending payload:', payload);  // Debug log
+    console.log('Sending payload:', payload);
     
     fetch(`/user/category/{{ category.uuid }}/submit-answer`, {
         method: 'POST',
@@ -255,20 +258,24 @@ function submitAnswer() {
         body: JSON.stringify(payload)
     })
     .then(response => {
-        console.log('Response status:', response.status);  // Debug log
+        console.log('Response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         return response.json();
     })
     .then(data => {
-        console.log('Response data:', data);  // Debug log
+        console.log('Response data:', data);
         if (data.error) {
             throw new Error(data.error);
         }
 
         const feedback = document.getElementById('answer-feedback');
-        feedback.textContent = data.explanation || (data.is_correct ? 'Correct!' : 'Incorrect!');
+        
+        // Simplified feedback without stats
+        let feedbackContent = data.is_correct ? 'Correct!' : 'Incorrect!';
+        
+        feedback.innerHTML = feedbackContent;
         feedback.className = `alert ${data.is_correct ? 'alert-success' : 'alert-danger'}`;
         feedback.classList.remove('d-none');
         
@@ -291,8 +298,8 @@ function submitAnswer() {
             accuracyBadge.textContent = data.accuracy.toFixed(1) + '%';
         }
         
-        // Update mastery status if needed
-        if (progressValue >= 95) {
+        // Update mastery status based on the mastered flag
+        if (data.mastered) {
             progressBar.classList.remove('bg-primary');
             progressBar.classList.add('bg-success');
             const statusBadge = document.querySelector('.badge.bg-warning');
@@ -303,20 +310,28 @@ function submitAnswer() {
             }
         }
         
-        // Add a next question button
-        const nextQuestionBtn = document.createElement('button');
-        nextQuestionBtn.className = 'btn btn-primary mt-3';
-        nextQuestionBtn.textContent = 'Next Question';
-        nextQuestionBtn.onclick = function() {
-            loadQuestion();
-            loadHistory();
-            feedback.classList.add('d-none');
-            // Remove the button after clicking
-            this.remove();
-        };
+        // Add a next question button in its dedicated container
+        const nextBtnContainer = document.getElementById('next-button-container');
+        if (nextBtnContainer) {
+            nextBtnContainer.innerHTML = '<button class="btn btn-primary">Next Question</button>';
+            nextBtnContainer.classList.remove('d-none');
+            
+            // Add click handler to the next button
+            const nextBtn = nextBtnContainer.querySelector('button');
+            if (nextBtn) {
+                nextBtn.onclick = function() {
+                    loadQuestion();
+                    loadHistory();
+                };
+            }
+        }
         
-        // Add the button after the answer feedback
-        feedback.after(nextQuestionBtn);
+        // Update submit button to show completion
+        if (submitBtn) {
+            submitBtn.className = 'btn btn-secondary';
+            submitBtn.innerHTML = 'Submitted';
+            // Keep button disabled
+        }
     })
     .catch(error => {
         console.error('Error submitting answer:', error);
@@ -324,6 +339,12 @@ function submitAnswer() {
         feedback.textContent = 'Error submitting answer. Please try again.';
         feedback.className = 'alert alert-danger';
         feedback.classList.remove('d-none');
+        
+        // Re-enable the submit button in case of error
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Submit Answer';
+        }
     });
 }
 
@@ -369,4 +390,4 @@ function loadHistory() {
         });
 }
 </script>
-{% endblock %} 
+{% endblock %}

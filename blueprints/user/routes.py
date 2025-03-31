@@ -127,22 +127,56 @@ def category_detail(category_uuid):
     category = g.db_session.query(Category).filter_by(uuid=category_uuid_str).options(
         joinedload(Category.questions).joinedload(Question.options)
     ).first()
-    print(f"Category: {category}")
     
     if not category:
-        logger.error(f"Category with UUID {category_uuid} not found")
-        flash('Category not found.', 'error')
+        logger.error(f"Learning Objective with UUID {category_uuid} not found")
+        flash('Learning Objective not found.', 'error')
         return redirect(url_for('user.dashboard'))
     
-    logger.debug(f"Found category: {category.name} (ID: {category.id}, UUID: {category.uuid})")
+    logger.debug(f"Found learning objective: {category.name} (ID: {category.id}, UUID: {category.uuid})")
     
+    # Get sections that contain this category
+    sections_with_category = [section for section in user.sections if category in section.categories]
+    
+    if not sections_with_category:
+        logger.error(f"User {user.id} does not have access to learning objective {category.id}")
+        flash('You do not have access to this learning objective.', 'error')
+        return redirect(url_for('user.dashboard'))
+    
+    # For each section, check if this category has prerequisites
+    # We'll enforce sequential progression within a section
+    for section in sections_with_category:
+        # Get all categories in this section in order
+        section_categories = section.categories
+        
+        # Find the index of the current category in the section
+        try:
+            current_index = section_categories.index(category)
+        except ValueError:
+            continue
+        
+        # If this is not the first category, check if previous ones are mastered
+        if current_index > 0:
+            for i in range(current_index):
+                prev_category = section_categories[i]
+                prev_user_category = g.db_session.query(UserCategory).filter_by(
+                    user_id=user.id,
+                    category_id=prev_category.id
+                ).first()
+                
+                # If previous category isn't mastered, redirect to it
+                if not prev_user_category or not prev_user_category.is_mastered():
+                    flash(f'You must master "{prev_category.name}" before accessing this learning objective.', 'warning')
+                    return redirect(url_for('user.category_detail', category_uuid=prev_category.uuid))
+    
+    # If we get here, all prerequisites are satisfied
     user_category = g.db_session.query(UserCategory).filter_by(
         user_id=user.id,
         category_id=category.id
     ).first()
     
     if not user_category:
-        logger.debug(f"Creating new UserCategory for user {user.id} and category {category.id}")
+        logger.debug(f"Creating new UserCategory for user {user.id} and learning objective {category.id}")
         user_category = UserCategory(
             user_id=user.id,
             category_id=category.id
@@ -156,7 +190,7 @@ def category_detail(category_uuid):
         category_id=category.id
     ).first()
     
-    logger.debug(f"Rendering category detail template with category: {category.name}, user_category: {user_category.current_knowledge if user_category else 'None'}")
+    logger.debug(f"Rendering learning objective detail template with learning objective: {category.name}, user_category: {user_category.current_knowledge if user_category else 'None'}")
     
     return render_template('user/category_detail.html',
                          user=user,
@@ -181,25 +215,62 @@ def get_next_question(category_uuid):
     
     logger.debug(f"Found category: {category.name} (ID: {category.id}, UUID: {category.uuid})")
     
-    # Get a random question from the category with options eagerly loaded
-    question = g.db_session.query(Question).filter_by(category_id=category.id).options(
-        joinedload(Question.options)
-    ).order_by(func.random()).first()
+    # Get user category state
+    user_category = g.db_session.query(UserCategory).filter_by(
+        user_id=user.id,
+        category_id=category.id
+    ).first()
     
-    if not question:
+    if not user_category:
+        user_category = UserCategory(
+            user_id=user.id,
+            category_id=category.id
+        )
+        g.db_session.add(user_category)
+        g.db_session.commit()
+    
+    # Get all questions for this category
+    questions = g.db_session.query(Question).filter_by(category_id=category.id).all()
+    
+    if not questions:
         logger.error(f"No questions found for category {category_uuid}")
         return jsonify({'error': 'No questions available'}), 404
     
-    logger.debug(f"Found question {question.uuid} for category {category_uuid}")
-    logger.debug(f"Question text: {question.text}")
-    logger.debug(f"Number of options: {len(question.options)}")
+    # Get question IDs for selection
+    question_ids = [str(q.id) for q in questions]
+    
+    # Use the question manager to select the next question
+    selected_id = user_category.select_next_question(question_ids)
+    
+    # Get the selected question with options eagerly loaded
+    selected_question = g.db_session.query(Question).filter_by(id=int(selected_id)).options(
+        joinedload(Question.options)
+    ).first()
+    
+    if not selected_question:
+        logger.error(f"Selected question {selected_id} not found")
+        # Fallback to random selection
+        selected_question = g.db_session.query(Question).filter_by(category_id=category.id).options(
+            joinedload(Question.options)
+        ).order_by(func.random()).first()
+    
+    logger.debug(f"Selected question {selected_question.uuid} for category {category_uuid}")
+    
+    # Get stats for this question if available
+    question_stats = user_category.get_question_stats(str(selected_question.id))
+    logger.debug(f"Question stats: {question_stats}")
     
     # Format the question for the frontend
-    options = [{'uuid': opt.uuid, 'text': opt.text} for opt in question.options]
+    options = [{'uuid': opt.uuid, 'text': opt.text} for opt in selected_question.options]
     response_data = {
-        'question_uuid': question.uuid,
-        'text': question.text,
-        'options': options
+        'question_uuid': selected_question.uuid,
+        'question_id': selected_question.id,  # Include the ID for tracking
+        'text': selected_question.text,
+        'options': options,
+        'stats': {
+            'attempts': question_stats.get('attempts', 0),
+            'correct_rate': question_stats.get('correct_rate', 0),
+        }
     }
     logger.debug(f"Sending response: {response_data}")
     
@@ -256,23 +327,33 @@ def submit_answer(category_uuid):
             )
             g.db_session.add(user_category)
         
-        # Update knowledge state using BKT
+        # Update knowledge state using BKT and register the question attempt
         logger.debug(f"Current knowledge state before update: {user_category.current_knowledge}")
-        user_category.update_knowledge_state(option.is_correct)
+        user_category.update_knowledge_state(option.is_correct, str(question.id))
         logger.debug(f"New knowledge state after update: {user_category.current_knowledge}")
+        
+        # Get question stats after update
+        question_stats = user_category.get_question_stats(str(question.id))
+        logger.debug(f"Updated question stats: {question_stats}")
         
         # Commit all changes
         g.db_session.commit()
         
+        # Return response with updated knowledge state and question stats
         return jsonify({
-            'success': True,
             'is_correct': option.is_correct,
-            'knowledge_state': user_category.current_knowledge
+            'knowledge_state': user_category.current_knowledge,
+            'mastered': user_category.is_mastered(),
+            'question_stats': {
+                'attempts': question_stats.get('attempts', 0),
+                'correct_rate': question_stats.get('correct_rate', 0),
+                'streak': question_stats.get('streak', 0)
+            }
         })
-            
+        
     except Exception as e:
-        logger.error(f"Error processing answer: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Error in submit_answer: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @user_bp.route('/category/<uuid:category_uuid>/history')
 @login_required

@@ -540,4 +540,96 @@ def remove_category_from_section(section_uuid, category_id):
         flash(f'Error removing category from section: {str(e)}', 'error')
         return redirect(url_for('admin.section_detail', section_uuid=section_uuid))
     finally:
+        session.close()
+
+@admin_bp.route('/users/<int:user_id>/categories/<int:category_id>/reset', methods=['POST'])
+@admin_required
+def reset_user_progress(user_id, category_id):
+    """Reset a user's progress for a specific learning objective."""
+    # Get a new session to ensure consistency
+    session = db.get_session()
+    
+    try:
+        # Get the user_category entry within this session
+        user_category = session.query(UserCategory).filter_by(
+            user_id=user_id,
+            category_id=category_id
+        ).first()
+        
+        if user_category:
+            # Reset knowledge to zero (instead of p_init)
+            user_category.current_knowledge = 0.0
+            # Reset consecutive correct counter
+            user_category.consecutive_correct = 0
+            # For IBKT, also reset the learning metrics and history
+            user_category.performance_history = []
+            user_category.total_attempts = 0
+            user_category.correct_attempts = 0
+            user_category.consistency_score = 0.0
+            user_category.improvement_rate = 0.0
+            user_category.error_recovery = 0.0
+            user_category.transit_adjustment = 0.0
+            user_category.slip_adjustment = 0.0
+            user_category.guess_adjustment = 0.0
+            
+            # Commit within this session
+            session.commit()
+            flash('Learning objective progress reset successfully!', 'success')
+        else:
+            flash('Learning objective assignment not found.', 'error')
+            
+        return redirect(url_for('admin.manage_user_categories', user_id=user_id))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error resetting progress: {str(e)}', 'error')
+        return redirect(url_for('admin.manage_user_categories', user_id=user_id))
+    finally:
+        session.close()
+
+@admin_bp.route('/users/<int:user_id>/reset-all-progress', methods=['POST'])
+@admin_required
+def reset_all_user_progress(user_id):
+    """Reset all learning objective progress for a user."""
+    # Get a new session to ensure consistency
+    session = db.get_session()
+    
+    try:
+        user = session.query(User).get(user_id)
+        if not user:
+            flash('User not found.', 'error')
+            return redirect(url_for('admin.manage_users'))
+        
+        # Get all UserCategory entries for this user within this session
+        user_categories = session.query(UserCategory).filter_by(user_id=user_id).all()
+        
+        if user_categories:
+            # Reset progress for each category
+            for user_category in user_categories:
+                # Reset knowledge to zero (instead of p_init)
+                user_category.current_knowledge = 0.0
+                # Reset consecutive correct counter
+                user_category.consecutive_correct = 0
+                # For IBKT, also reset the learning metrics and history
+                user_category.performance_history = []
+                user_category.total_attempts = 0
+                user_category.correct_attempts = 0
+                user_category.consistency_score = 0.0
+                user_category.improvement_rate = 0.0
+                user_category.error_recovery = 0.0
+                user_category.transit_adjustment = 0.0
+                user_category.slip_adjustment = 0.0
+                user_category.guess_adjustment = 0.0
+            
+            # Commit all changes within this session
+            session.commit()
+            flash(f'All learning objective progress for {user.name} has been reset successfully!', 'success')
+        else:
+            flash('No learning objectives found for this user.', 'warning')
+        
+        return redirect(url_for('admin.manage_user_categories', user_id=user_id))
+    except Exception as e:
+        session.rollback()
+        flash(f'Error resetting progress: {str(e)}', 'error')
+        return redirect(url_for('admin.manage_user_categories', user_id=user_id))
+    finally:
         session.close() 

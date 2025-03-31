@@ -10,10 +10,11 @@ from sqlalchemy import (
     func,
     event,
     Table,
+    PickleType
 )
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
 from .base import Base
-from bkt.engine import BKTEngine
+from bkt.engine import BKTEngine, IBKTEngine
 import uuid
 
 # Section-User association table (many-to-many)
@@ -162,50 +163,189 @@ class UserCategory(Base):
     p_lapse = Column(Float, default=0.30)  # Unchanged lapse probability
     consecutive_correct = Column(Integer, default=0)  # Track consecutive correct answers
     
+    # IBKT additional parameters
+    performance_history = Column(PickleType, default=list)  # Store performance history as list
+    total_attempts = Column(Integer, default=0)  # Total number of attempts
+    correct_attempts = Column(Integer, default=0)  # Number of correct attempts
+    
+    # Learning style metrics
+    consistency_score = Column(Float, default=0.0)
+    improvement_rate = Column(Float, default=0.0)
+    error_recovery = Column(Float, default=0.0)
+    
+    # Parameter adjustments
+    transit_adjustment = Column(Float, default=0.0)
+    slip_adjustment = Column(Float, default=0.0)
+    guess_adjustment = Column(Float, default=0.0)
+    
+    # Adaptation settings
+    learning_rate = Column(Float, default=0.05)
+    adaptivity_threshold = Column(Integer, default=10)
+    adaptation_rate = Column(Float, default=0.05)
+    
+    # Question manager settings
+    question_history = Column(PickleType, default=dict)  # Store history of question attempts
+    
     # Relationships
     user = relationship("User", back_populates="user_categories")
     category = relationship("Category", back_populates="user_categories")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._init_bkt_engine()
+        self._init_ibkt_engine()
+        self._init_question_manager()
 
-    def _init_bkt_engine(self):
-        """Initialize the BKT engine with current parameters"""
-        self.bkt_engine = BKTEngine(
+    def _init_ibkt_engine(self):
+        """Initialize the IBKT engine with current parameters"""
+        self.ibkt_engine = IBKTEngine(
             p_init=self.p_init,
             p_transit=self.p_transit,
             p_slip=self.p_slip,
             p_guess=self.p_guess,
-            p_lapse=self.p_lapse
+            p_lapse=self.p_lapse,
+            learning_rate=self.learning_rate,
+            adaptivity_threshold=self.adaptivity_threshold,
+            performance_history=self.performance_history,
+            adaptation_rate=self.adaptation_rate
         )
-        # Set the consecutive correct counter to match the stored value
-        self.bkt_engine.consecutive_correct = self.consecutive_correct
+        # Set counters and metrics
+        self.ibkt_engine.consecutive_correct = self.consecutive_correct
+        self.ibkt_engine.total_attempts = self.total_attempts
+        self.ibkt_engine.correct_attempts = self.correct_attempts
+        self.ibkt_engine.consistency_score = self.consistency_score
+        self.ibkt_engine.improvement_rate = self.improvement_rate
+        self.ibkt_engine.error_recovery = self.error_recovery
+        self.ibkt_engine.transit_adjustment = self.transit_adjustment
+        self.ibkt_engine.slip_adjustment = self.slip_adjustment
+        self.ibkt_engine.guess_adjustment = self.guess_adjustment
+        
+    def _init_question_manager(self):
+        """Initialize the QuestionManager for question selection"""
+        from bkt.engine import QuestionManager
+        
+        # Create question manager with settings
+        self.question_manager = QuestionManager(
+            spacing_factor=2.5,      # Higher value = faster spacing increase
+            error_priority=0.85,     # Higher value = more frequent repetition of wrong answers
+            knowledge_penalty=0.35   # Higher value = bigger knowledge drop for previously correct items
+        )
+        
+        # Restore question history from database if available
+        if self.question_history:
+            self.question_manager.question_history = self.question_history.get('history', {})
+            self.question_manager.last_seen = self.question_history.get('last_seen', {})
+            self.question_manager.correct_streak = self.question_history.get('streak', {})
+            self.question_manager.attempt_counter = self.question_history.get('counter', 0)
 
-    def update_knowledge_state(self, is_correct: bool) -> None:
-        """Update the knowledge state using BKT."""
+    def update_knowledge_state(self, is_correct: bool, question_id=None) -> None:
+        """
+        Update the knowledge state using IBKT.
+        
+        Args:
+            is_correct: Whether the answer was correct
+            question_id: Optional question ID for tracking history
+        """
         # First predict the new state
-        predicted_knowledge = self.bkt_engine.predict(self.current_knowledge)
+        predicted_knowledge = self.ibkt_engine.predict(self.current_knowledge)
         # Then update based on the actual performance
-        self.current_knowledge = self.bkt_engine.update(predicted_knowledge, is_correct)
-        # Save the consecutive correct counter
-        self.consecutive_correct = self.bkt_engine.consecutive_correct
-        # Reinitialize BKT engine with updated parameters
-        self._init_bkt_engine()
+        self.current_knowledge = self.ibkt_engine.update(predicted_knowledge, is_correct)
+        
+        # If a question ID was provided, register the attempt with the question manager
+        if question_id:
+            self.register_question_attempt(question_id, is_correct, self.current_knowledge)
+        
+        # Save engine state back to model
+        self.consecutive_correct = self.ibkt_engine.consecutive_correct
+        self.performance_history = self.ibkt_engine.performance_history
+        self.total_attempts = self.ibkt_engine.total_attempts
+        self.correct_attempts = self.ibkt_engine.correct_attempts
+        self.consistency_score = self.ibkt_engine.consistency_score
+        self.improvement_rate = self.ibkt_engine.improvement_rate
+        self.error_recovery = self.ibkt_engine.error_recovery
+        self.transit_adjustment = self.ibkt_engine.transit_adjustment
+        self.slip_adjustment = self.ibkt_engine.slip_adjustment
+        self.guess_adjustment = self.ibkt_engine.guess_adjustment
+        
+        # Reinitialize IBKT engine with updated parameters
+        self._init_ibkt_engine()
+    
+    def register_question_attempt(self, question_id, is_correct, knowledge_level):
+        """
+        Register an attempt at a specific question and update the question history.
+        
+        Args:
+            question_id: The question's unique identifier
+            is_correct: Whether the answer was correct
+            knowledge_level: Current knowledge level
+        """
+        # Ensure the question manager is initialized
+        if not hasattr(self, 'question_manager'):
+            self._init_question_manager()
+            
+        # Register the attempt with the question manager
+        adjusted_knowledge = self.question_manager.register_attempt(
+            question_id, is_correct, knowledge_level
+        )
+        
+        # If knowledge was adjusted (due to regression), update the current knowledge
+        if adjusted_knowledge != knowledge_level:
+            self.current_knowledge = adjusted_knowledge
+            
+        # Save question manager state back to the database
+        self.question_history = {
+            'history': self.question_manager.question_history,
+            'last_seen': self.question_manager.last_seen,
+            'streak': self.question_manager.correct_streak,
+            'counter': self.question_manager.attempt_counter
+        }
+
+    def select_next_question(self, available_question_ids):
+        """
+        Select the next question to present to the user based on performance history.
+        
+        Args:
+            available_question_ids: List of question IDs available for selection
+            
+        Returns:
+            str: Selected question ID
+        """
+        # Ensure the question manager is initialized
+        if not hasattr(self, 'question_manager'):
+            self._init_question_manager()
+            
+        # Use question manager to select the next question
+        return self.question_manager.select_next_question(available_question_ids)
+    
+    def get_question_stats(self, question_id):
+        """
+        Get statistics for a specific question.
+        
+        Args:
+            question_id: The question ID to get stats for
+            
+        Returns:
+            dict: Question statistics
+        """
+        # Ensure the question manager is initialized
+        if not hasattr(self, 'question_manager'):
+            self._init_question_manager()
+            
+        return self.question_manager.get_question_stats(question_id)
 
     def is_mastered(self, threshold: float = 0.985) -> bool:
         """Check if the user has mastered this category using a very high threshold."""
-        if not hasattr(self, 'bkt_engine'):
-            self._init_bkt_engine()
-        return self.bkt_engine.is_mastered(self.current_knowledge, threshold)
+        if not hasattr(self, 'ibkt_engine'):
+            self._init_ibkt_engine()
+        return self.ibkt_engine.is_mastered(self.current_knowledge, threshold)
 
     def __repr__(self):
         return f"<UserCategory(user_id={self.user_id}, category_id={self.category_id}, knowledge={self.current_knowledge:.2f})>"
 
-# Add event listener to initialize BKT engine when UserCategory is loaded
+# Add event listener to initialize IBKT engine when UserCategory is loaded
 @event.listens_for(UserCategory, 'load')
-def init_bkt_engine(target, context):
-    target._init_bkt_engine()
+def init_ibkt_engine(target, context):
+    target._init_ibkt_engine()
+    target._init_question_manager()
 
 # ATTEMPT LOG (User interactions)
 class AttemptLog(Base):

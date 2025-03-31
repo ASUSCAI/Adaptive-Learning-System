@@ -13,6 +13,7 @@ sys.path.insert(0, str(project_root))
 
 from database.migrations import add_sections
 from database.migrations import add_consecutive_counter
+from database.migrations import add_ibkt_columns
 
 def run_migrations():
     """Run all migrations in the correct order"""
@@ -28,6 +29,7 @@ def run_migrations():
     migrations = [
         add_sections,
         add_consecutive_counter,
+        add_ibkt_columns,
     ]
     
     success = True

@@ -1,39 +1,57 @@
 {% extends "user/base.html" %}
 
-{% block title %}{{ section.name }} - Categories{% endblock %}
+{% block title %}{{ section.name }} - Learning Objectives{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2>{{ section.name }}</h2>
-            <a href="{{ url_for('user.dashboard') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i> Back to Dashboard
-            </a>
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('user.dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ section.name }}</li>
+                </ol>
+            </nav>
         </div>
-        {% if section.description %}
-        <p class="text-muted">{{ section.description }}</p>
-        {% endif %}
     </div>
-</div>
 
-<div class="row">
-    <div class="col">
-        <div class="card">
-            <div class="card-header bg-light">
-                <h4>Categories in this Section</h4>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    {% for category in section.categories %}
-                    <div class="col-md-4 mb-4">
-                        <div class="card category-card h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">{{ category.name }}</h5>
-                                {% set user_category = user_categories.get(category.id) %}
-                                {% if user_category %}
-                                    <div class="progress mb-2">
-                                        <div class="progress-bar {% if user_category.is_mastered() %}bg-success{% else %}bg-primary{% endif %}"
+    <div class="row mb-3">
+        <div class="col">
+            <h2>{{ section.name }}</h2>
+            <p>{{ section.description }}</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <h4>Learning Objectives in this Section</h4>
+            <p class="text-muted"><small>Complete objectives in order to progress. Master each objective to unlock the next one.</small></p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <div class="learning-path">
+                {% set prev_unlocked = True %}
+                {% for category in section.categories %}
+                    {% set user_category = user_categories.get(category.id) %}
+                    {% set is_mastered = user_category and user_category.is_mastered() %}
+                    {% set is_unlocked = loop.first or prev_unlocked %}
+                    {% set prev_unlocked = is_mastered %}
+                    
+                    <div class="learning-objective-card mb-4 {% if not is_unlocked %}locked{% endif %}">
+                        <div class="row g-0">
+                            <div class="col-md-1 d-flex align-items-center justify-content-center p-3">
+                                <div class="objective-number {% if is_mastered %}mastered{% elif is_unlocked %}active{% endif %}">
+                                    {{ loop.index }}
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ category.name }}</h5>
+                                    {% if user_category %}
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar {% if is_mastered %}bg-success{% else %}bg-primary{% endif %}"
                                             role="progressbar"
                                             style="width: {{ (user_category.current_knowledge * 100)|round }}%"
                                             aria-valuenow="{{ (user_category.current_knowledge * 100)|round }}"
@@ -42,35 +60,91 @@
                                             {{ (user_category.current_knowledge * 100)|round }}%
                                         </div>
                                     </div>
-                                    {% if user_category.is_mastered() %}
-                                        <div class="badge bg-success mb-2">Mastered!</div>
-                                    {% endif %}
-                                {% else %}
-                                    <div class="progress mb-2">
-                                        <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%">0%</div>
-                                    </div>
-                                {% endif %}
-                                
-                                <a href="{{ url_for('user.category_detail', category_uuid=category.uuid) }}" class="btn btn-primary">
-                                    {% if user_category and user_category.is_mastered() %}
-                                        Review
                                     {% else %}
-                                        Learn
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                            0%
+                                        </div>
+                                    </div>
                                     {% endif %}
-                                </a>
+                                </div>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-center justify-content-center">
+                                {% if is_mastered %}
+                                    <span class="badge bg-success me-2"><i class="bi bi-check-circle-fill"></i> Mastered</span>
+                                    <a href="{{ url_for('user.category_detail', category_uuid=category.uuid) }}" class="btn btn-outline-primary">
+                                        <i class="bi bi-check-circle"></i> Review
+                                    </a>
+                                {% elif is_unlocked %}
+                                    <a href="{{ url_for('user.category_detail', category_uuid=category.uuid) }}" class="btn btn-primary">
+                                        <i class="bi bi-play-circle"></i> Practice
+                                    </a>
+                                {% else %}
+                                    <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Locked</span>
+                                {% endif %}
                             </div>
                         </div>
+                        {% if not loop.last %}
+                        <div class="connector-line {% if is_mastered %}completed{% endif %}"></div>
+                        {% endif %}
                     </div>
-                    {% else %}
-                    <div class="col">
-                        <div class="alert alert-info">
-                            No categories available in this section yet.
-                        </div>
-                    </div>
-                    {% endfor %}
+                {% else %}
+                <div class="alert alert-info">
+                    No learning objectives available in this section yet.
                 </div>
+                {% endfor %}
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.learning-path {
+    position: relative;
+    padding: 20px 0;
+}
+.learning-objective-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: white;
+    position: relative;
+    transition: all 0.3s ease;
+}
+.learning-objective-card.locked {
+    opacity: 0.7;
+    background-color: #f8f9fa;
+}
+.objective-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #dee2e6;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+.objective-number.active {
+    background-color: #007bff;
+    color: white;
+}
+.objective-number.mastered {
+    background-color: #28a745;
+    color: white;
+}
+.connector-line {
+    position: absolute;
+    left: 20px;
+    bottom: -20px;
+    width: 2px;
+    height: 20px;
+    background-color: #dee2e6;
+    z-index: 1;
+}
+.connector-line.completed {
+    background-color: #28a745;
+}
+</style>
 {% endblock %} 
