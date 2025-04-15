@@ -1,0 +1,3 @@
+[submodule "rasqal"]
+	path = rasqal
+	url = https://github.com/ASUSCAI/rasqal
